@@ -9,7 +9,7 @@ const DOCS_COLLECTION = 'hoso_documents'
 
 // Debounce for real-time subscriptions
 let refreshTimer = null
-function debouncedCallback(callback, delay = 500) {
+function debouncedCallback(callback, delay = 100) {
     clearTimeout(refreshTimer)
     refreshTimer = setTimeout(callback, delay)
 }

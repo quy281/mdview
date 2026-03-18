@@ -75,24 +75,38 @@ export default function App() {
         return () => unsubscribe()
     }, [isAuthenticated, refreshProjects])
 
-    // — Project CRUD —
+    // — Project CRUD (optimistic) —
 
     const handleCreateProject = useCallback(async (name) => {
+        const tempId = 'temp_' + Date.now()
+        const optimistic = { id: tempId, name: name.trim(), createdAt: new Date().toISOString(), documents: [] }
+
+        // Instant UI update
+        setProjects(prev => [optimistic, ...prev])
+        setSelectedProject(tempId)
+
+        // Server sync in background
         const project = await createProject(name)
-        await refreshProjects()
-        if (project) setSelectedProject(project.id)
+        if (project) {
+            setProjects(prev => prev.map(p => p.id === tempId ? { ...optimistic, id: project.id } : p))
+            setSelectedProject(project.id)
+        }
+        refreshProjects() // background sync, no await
     }, [refreshProjects])
 
     const handleDeleteProject = useCallback(async (id) => {
-        await deleteProjectFromStore(id)
+        // Instant UI update
+        setProjects(prev => prev.filter(p => p.id !== id))
         if (selectedProject === id) {
             setSelectedProject(null)
             setDocument(null)
         }
-        await refreshProjects()
+
+        // Server sync in background
+        deleteProjectFromStore(id).then(() => refreshProjects())
     }, [selectedProject, refreshProjects])
 
-    // — Multi-file upload (files go into selected project) —
+    // — Multi-file upload (optimistic) —
 
     const handleFilesProcessed = useCallback(async (results) => {
         if (!selectedProject) {
@@ -100,16 +114,32 @@ export default function App() {
             return
         }
 
-        for (const result of results) {
-            await saveDocument(selectedProject, result.fileName, result.content, result.type)
-        }
-        await refreshProjects()
+        // Instant UI update: add documents to local project state immediately
+        const newDocs = results.map((r, i) => ({
+            id: 'temp_' + Date.now() + '_' + i,
+            fileName: r.fileName,
+            content: r.content,
+            type: r.type,
+            createdAt: new Date().toISOString(),
+        }))
+        setProjects(prev => prev.map(p =>
+            p.id === selectedProject
+                ? { ...p, documents: [...newDocs, ...p.documents] }
+                : p
+        ))
 
-        // Open the last uploaded file
+        // Open the last uploaded file instantly
         const last = results[results.length - 1]
         setDocument({ type: last.type, content: last.content, fileName: last.fileName })
         setShowDropper(false)
         setAnnotationActive(false)
+
+        // Server sync in background (don't block UI)
+        for (const result of results) {
+            saveDocument(selectedProject, result.fileName, result.content, result.type)
+        }
+        // Refresh after a short delay to get real IDs
+        setTimeout(() => refreshProjects(), 1000)
     }, [selectedProject, refreshProjects])
 
     // — Document selection —
