@@ -18,13 +18,12 @@ function debouncedCallback(callback, delay = 500) {
 
 export async function getProjects() {
     try {
-        const projects = await pb.collection(PROJECTS_COLLECTION).getFullList({
-            sort: '-created',
-        })
+        const projects = await pb.collection(PROJECTS_COLLECTION).getFullList()
 
-        const docs = await pb.collection(DOCS_COLLECTION).getFullList({
-            sort: '-created',
-        })
+        const docs = await pb.collection(DOCS_COLLECTION).getFullList()
+
+        projects.sort((a, b) => b.created.localeCompare(a.created))
+        docs.sort((a, b) => b.created.localeCompare(a.created))
 
         return projects.map((p) => ({
             id: p.id,
