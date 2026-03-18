@@ -3,33 +3,44 @@ import { processFile } from '../utils/fileProcessor'
 
 /**
  * FileDropper – Drag-and-drop zone for .md and .docx files.
- * Shows which project the file will be uploaded to.
+ * Supports multi-file selection. Requires a project to be selected.
  */
-export default function FileDropper({ onFileProcessed, projectName, className = '' }) {
+export default function FileDropper({ onFilesProcessed, projectName, className = '' }) {
     const [isDragging, setIsDragging] = useState(false)
     const [error, setError] = useState(null)
     const [loading, setLoading] = useState(false)
+    const [progress, setProgress] = useState('')
     const inputRef = useRef(null)
 
-    const handleFile = useCallback(async (file) => {
+    const handleFiles = useCallback(async (fileList) => {
+        if (!fileList || fileList.length === 0) return
         setError(null)
         setLoading(true)
-        try {
-            const result = await processFile(file)
-            onFileProcessed(result)
-        } catch (err) {
-            setError(err.message)
-        } finally {
-            setLoading(false)
+
+        const results = []
+        for (let i = 0; i < fileList.length; i++) {
+            const file = fileList[i]
+            setProgress(`Đang xử lý ${i + 1}/${fileList.length}: ${file.name}`)
+            try {
+                const result = await processFile(file)
+                results.push(result)
+            } catch (err) {
+                setError(`Lỗi file "${file.name}": ${err.message}`)
+            }
         }
-    }, [onFileProcessed])
+
+        setLoading(false)
+        setProgress('')
+        if (results.length > 0) {
+            onFilesProcessed(results)
+        }
+    }, [onFilesProcessed])
 
     const handleDrop = useCallback((e) => {
         e.preventDefault()
         setIsDragging(false)
-        const file = e.dataTransfer.files[0]
-        if (file) handleFile(file)
-    }, [handleFile])
+        handleFiles(e.dataTransfer.files)
+    }, [handleFiles])
 
     const handleDragOver = useCallback((e) => {
         e.preventDefault()
@@ -45,10 +56,9 @@ export default function FileDropper({ onFileProcessed, projectName, className = 
     }, [])
 
     const handleInputChange = useCallback((e) => {
-        const file = e.target.files[0]
-        if (file) handleFile(file)
+        handleFiles(e.target.files)
         e.target.value = ''
-    }, [handleFile])
+    }, [handleFiles])
 
     return (
         <div
@@ -59,12 +69,13 @@ export default function FileDropper({ onFileProcessed, projectName, className = 
             onClick={handleClick}
             role="button"
             tabIndex={0}
-            aria-label="Drop a file here or click to upload"
+            aria-label="Drop files here or click to upload"
         >
             <input
                 ref={inputRef}
                 type="file"
                 accept=".md,.markdown,.docx"
+                multiple
                 onChange={handleInputChange}
                 className="hidden"
                 aria-hidden="true"
@@ -72,7 +83,7 @@ export default function FileDropper({ onFileProcessed, projectName, className = 
 
             <div className="flex flex-col items-center gap-3">
                 {loading ? (
-                    <div className="text-base font-medium">Đang xử lý...</div>
+                    <div className="text-base font-medium">{progress || 'Đang xử lý...'}</div>
                 ) : (
                     <>
                         <svg
@@ -100,8 +111,13 @@ export default function FileDropper({ onFileProcessed, projectName, className = 
                                     📂 Tải vào: {projectName}
                                 </p>
                             )}
+                            {!projectName && (
+                                <p className="text-sm mt-1 text-orange-600 font-medium">
+                                    ⚠️ Chọn 1 dự án trước khi tải file
+                                </p>
+                            )}
                             <p className="text-sm mt-1 opacity-60">
-                                Hỗ trợ: .md, .docx
+                                Hỗ trợ: .md, .docx (chọn nhiều file cùng lúc)
                             </p>
                         </div>
                     </>

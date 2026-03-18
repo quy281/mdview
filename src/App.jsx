@@ -15,10 +15,18 @@ import {
     subscribeToChanges,
 } from './store/projectStore'
 
-/**
- * App – Main layout for HoSo Reader.
- * Requires admin authentication to sync with PocketBase.
- */
+const RECENT_KEY = 'hoso_recent_docs'
+const MAX_RECENT = 10
+
+function getRecentDocs() {
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') } catch { return [] }
+}
+function addRecentDoc(doc) {
+    const recent = getRecentDocs().filter(d => d.id !== doc.id)
+    recent.unshift({ id: doc.id, fileName: doc.fileName, type: doc.type, projectId: doc.projectId, projectName: doc.projectName, viewedAt: Date.now() })
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)))
+}
+
 export default function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(pb.authStore.isValid)
     const [projects, setProjects] = useState([])
@@ -27,9 +35,9 @@ export default function App() {
     const [showDropper, setShowDropper] = useState(true)
     const [annotationActive, setAnnotationActive] = useState(false)
     const [loading, setLoading] = useState(true)
+    const [recentDocs, setRecentDocs] = useState(getRecentDocs())
     const dropperRef = useRef(null)
 
-    // Load projects from PocketBase
     const refreshProjects = useCallback(async () => {
         if (!isAuthenticated) return
         try {
@@ -44,7 +52,6 @@ export default function App() {
         if (isAuthenticated) refreshProjects()
     }, [isAuthenticated, refreshProjects])
 
-    // Real-time sync
     useEffect(() => {
         if (!isAuthenticated) return
         const unsubscribe = subscribeToChanges(() => refreshProjects())
@@ -68,23 +75,52 @@ export default function App() {
         await refreshProjects()
     }, [selectedProject, refreshProjects])
 
-    // — Document management —
+    // — Multi-file upload (files go into selected project) —
 
-    const handleFileProcessed = useCallback(async (result) => {
-        if (selectedProject) {
-            await saveDocument(selectedProject, result.fileName, result.content, result.type)
-            await refreshProjects()
+    const handleFilesProcessed = useCallback(async (results) => {
+        if (!selectedProject) {
+            alert('Vui lòng chọn 1 dự án trước khi tải file!')
+            return
         }
-        setDocument({ type: result.type, content: result.content, fileName: result.fileName })
+
+        for (const result of results) {
+            await saveDocument(selectedProject, result.fileName, result.content, result.type)
+        }
+        await refreshProjects()
+
+        // Open the last uploaded file
+        const last = results[results.length - 1]
+        setDocument({ type: last.type, content: last.content, fileName: last.fileName })
         setShowDropper(false)
         setAnnotationActive(false)
     }, [selectedProject, refreshProjects])
 
-    const handleSelectDocument = useCallback((doc) => {
+    // — Document selection —
+
+    const handleSelectDocument = useCallback((doc, projectId, projectName) => {
         setDocument({ type: doc.type, content: doc.content, fileName: doc.fileName })
         setShowDropper(false)
         setAnnotationActive(false)
+
+        // Track in recent
+        addRecentDoc({ id: doc.id, fileName: doc.fileName, type: doc.type, projectId, projectName })
+        setRecentDocs(getRecentDocs())
     }, [])
+
+    const handleOpenRecent = useCallback((recent) => {
+        // Find the document in projects
+        for (const proj of projects) {
+            const doc = proj.documents.find(d => d.id === recent.id)
+            if (doc) {
+                setSelectedProject(proj.id)
+                setDocument({ type: doc.type, content: doc.content, fileName: doc.fileName })
+                setShowDropper(false)
+                setAnnotationActive(false)
+                return
+            }
+        }
+        alert('Tài liệu không còn tồn tại.')
+    }, [projects])
 
     const handleDeleteDocument = useCallback(async (projectId, docId) => {
         await deleteDocFromStore(projectId, docId)
@@ -149,9 +185,8 @@ export default function App() {
         URL.revokeObjectURL(url)
     }, [document])
 
-    const selectedProjectName = selectedProject
-        ? projects.find((p) => p.id === selectedProject)?.name
-        : null
+    const selectedProjectData = projects.find((p) => p.id === selectedProject)
+    const selectedProjectName = selectedProjectData?.name || null
 
     if (!isAuthenticated) {
         return <LoginScreen onLoginSuccess={() => setIsAuthenticated(true)} />
@@ -159,7 +194,7 @@ export default function App() {
 
     return (
         <div className="flex min-h-screen min-h-dvh">
-            {/* Desktop sidebar – hidden on mobile */}
+            {/* Desktop sidebar */}
             <div className="hidden md:block">
                 <Sidebar
                     projects={projects}
@@ -167,7 +202,10 @@ export default function App() {
                     onSelectProject={setSelectedProject}
                     onCreateProject={handleCreateProject}
                     onDeleteProject={handleDeleteProject}
-                    onSelectDocument={handleSelectDocument}
+                    onSelectDocument={(doc) => {
+                        const proj = projects.find(p => p.documents.some(d => d.id === doc.id))
+                        handleSelectDocument(doc, proj?.id, proj?.name)
+                    }}
                     onDeleteDocument={handleDeleteDocument}
                     onUploadClick={handleUploadClick}
                     onLogout={handleLogout}
@@ -175,12 +213,14 @@ export default function App() {
                     isOpen={true}
                     onClose={() => { }}
                     loading={loading}
+                    recentDocs={recentDocs}
+                    onOpenRecent={handleOpenRecent}
                 />
             </div>
 
             {/* Main content */}
             <main className="flex-1 flex flex-col min-h-screen min-h-dvh bg-gray-100">
-                {/* Desktop toolbar – hidden on mobile */}
+                {/* Desktop toolbar */}
                 <div className="hidden md:block">
                     <Toolbar
                         fileName={document?.fileName}
@@ -192,21 +232,50 @@ export default function App() {
                     />
                 </div>
 
-                {/* Mobile top bar – minimal file name only */}
+                {/* Mobile top bar */}
                 <div className="md:hidden flex items-center px-4 py-2 border-b border-gray-300 bg-white no-print">
                     <span className="text-sm font-semibold truncate" style={{ fontFamily: 'var(--font-doc)' }}>
                         {document?.fileName || 'HoSo Reader'}
                     </span>
                 </div>
 
-                {/* Preview area – extra bottom padding on mobile for nav bar */}
+                {/* Preview area */}
                 <div className="flex-1 overflow-auto p-4 md:p-8 pb-20 md:pb-8 flex flex-col items-center">
                     {showDropper && (
                         <div ref={dropperRef} className="w-full max-w-[210mm] mb-6">
                             <FileDropper
-                                onFileProcessed={handleFileProcessed}
+                                onFilesProcessed={handleFilesProcessed}
                                 projectName={selectedProjectName}
                             />
+                        </div>
+                    )}
+
+                    {/* Recent Documents (when no document is open) */}
+                    {!document && recentDocs.length > 0 && (
+                        <div className="w-full max-w-[210mm] mb-6">
+                            <h3 className="text-sm font-bold uppercase tracking-wider mb-3 text-gray-600">
+                                📋 Tài liệu gần đây
+                            </h3>
+                            <div className="grid gap-2">
+                                {recentDocs.map((r) => (
+                                    <button
+                                        key={r.id}
+                                        onClick={() => handleOpenRecent(r)}
+                                        className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 hover:border-ink text-left cursor-pointer transition-colors"
+                                    >
+                                        <span className="text-lg">{r.type === 'md' ? '📝' : '📄'}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium truncate">{r.fileName}</p>
+                                            {r.projectName && (
+                                                <p className="text-xs text-gray-500 truncate">📂 {r.projectName}</p>
+                                            )}
+                                        </div>
+                                        <span className="text-xs text-gray-400">
+                                            {new Date(r.viewedAt).toLocaleDateString('vi-VN')}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     )}
 
@@ -214,14 +283,17 @@ export default function App() {
                 </div>
             </main>
 
-            {/* Mobile bottom nav – hidden on desktop */}
+            {/* Mobile bottom nav */}
             <BottomNav
                 projects={projects}
                 selectedProject={selectedProject}
                 onSelectProject={setSelectedProject}
                 onCreateProject={handleCreateProject}
                 onDeleteProject={handleDeleteProject}
-                onSelectDocument={handleSelectDocument}
+                onSelectDocument={(doc) => {
+                    const proj = projects.find(p => p.documents.some(d => d.id === doc.id))
+                    handleSelectDocument(doc, proj?.id, proj?.name)
+                }}
                 onDeleteDocument={handleDeleteDocument}
                 onUploadClick={handleUploadClick}
                 onLogout={handleLogout}
@@ -231,6 +303,8 @@ export default function App() {
                 onPrint={handlePrint}
                 onSaveHtml={handleSaveHtml}
                 hasDocument={!!document}
+                recentDocs={recentDocs}
+                onOpenRecent={handleOpenRecent}
             />
         </div>
     )

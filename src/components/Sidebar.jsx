@@ -228,6 +228,28 @@ export default function Sidebar({
                     )}
                 </div>
 
+                {/* Recent Documents */}
+                {recentDocs && recentDocs.length > 0 && (
+                    <div className="px-4 py-3 border-t border-gray-200">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                            Gần đây
+                        </p>
+                        <ul className="space-y-0.5">
+                            {recentDocs.slice(0, 5).map((r) => (
+                                <li key={r.id}>
+                                    <button
+                                        onClick={() => onOpenRecent && onOpenRecent(r)}
+                                        className="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 cursor-pointer flex items-center gap-2 truncate"
+                                    >
+                                        <span>{r.type === 'md' ? '📝' : '📄'}</span>
+                                        <span className="truncate">{r.fileName}</span>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
                 {/* Footer */}
                 <div className="px-4 py-3 border-t border-gray-300 flex items-center justify-between">
                     <p className="text-xs text-gray-500">

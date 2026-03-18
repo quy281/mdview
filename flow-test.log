@@ -1,0 +1,9 @@
+Step 1: Admin login...
+  isValid: true
+  token length: 223
+Step 2: getFullList from hoso_projects...
+  Got 1 projects
+  Project: {"collectionId":"pbc_989858012","collectionName":"hoso_projects","id":"7a3db1k02562xio","name":"a"}
+Step 3: getFullList from hoso_documents...
+  Got 0 documents
+DONE
