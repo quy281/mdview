@@ -7,7 +7,7 @@ import pb from './pb'
 const PROJECTS_COLLECTION = 'hoso_projects'
 const DOCS_COLLECTION = 'hoso_documents'
 
-// Debounce refresh to avoid race conditions
+// Debounce for real-time subscriptions
 let refreshTimer = null
 function debouncedCallback(callback, delay = 500) {
     clearTimeout(refreshTimer)
@@ -19,11 +19,10 @@ function debouncedCallback(callback, delay = 500) {
 export async function getProjects() {
     try {
         const projects = await pb.collection(PROJECTS_COLLECTION).getFullList()
-
         const docs = await pb.collection(DOCS_COLLECTION).getFullList()
 
-        projects.sort((a, b) => b.created.localeCompare(a.created))
-        docs.sort((a, b) => b.created.localeCompare(a.created))
+        projects.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
+        docs.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
 
         return projects.map((p) => ({
             id: p.id,
@@ -41,6 +40,11 @@ export async function getProjects() {
         }))
     } catch (err) {
         console.error('Failed to load projects:', err)
+        // If 401/403, token is bad - force re-login
+        if (err.status === 401 || err.status === 403) {
+            pb.authStore.clear()
+            window.location.reload()
+        }
         return []
     }
 }
@@ -64,14 +68,12 @@ export async function createProject(name) {
 
 export async function deleteProject(id) {
     try {
-        // Delete all documents in the project first
         const docs = await pb.collection(DOCS_COLLECTION).getFullList({
             filter: `project_id = "${id}"`,
         })
         for (const doc of docs) {
             await pb.collection(DOCS_COLLECTION).delete(doc.id)
         }
-        // Delete the project
         await pb.collection(PROJECTS_COLLECTION).delete(id)
     } catch (err) {
         console.error('Failed to delete project:', err)

@@ -13,9 +13,13 @@ export default function LoginScreen({ onLoginSuccess }) {
         setLoading(true)
 
         try {
-            // Authenticate as Admin (per user request for db.mkg.vn)
-            // PB will automatically save the token to localStorage via pb.authStore
-            await pb.admins.authWithPassword(email, password)
+            // PB v0.23+ uses _superusers collection
+            try {
+                await pb.collection('_superusers').authWithPassword(email, password)
+            } catch {
+                // Fallback for older PB versions
+                await pb.admins.authWithPassword(email, password)
+            }
             onLoginSuccess()
         } catch (err) {
             console.error('Login error:', err)

@@ -43,10 +43,27 @@ export default function App() {
         try {
             const data = await getProjects()
             setProjects(data || [])
+        } catch (err) {
+            console.error('refreshProjects error:', err)
         } finally {
             setLoading(false)
         }
     }, [isAuthenticated])
+
+    // Validate token on mount — if stale, force re-login
+    useEffect(() => {
+        if (!pb.authStore.isValid) return
+        // Try to verify the token by refreshing auth
+        pb.collection('_superusers').authRefresh().then(() => {
+            setIsAuthenticated(true)
+            refreshProjects()
+        }).catch(() => {
+            console.warn('Stale auth token, logging out...')
+            pb.authStore.clear()
+            setIsAuthenticated(false)
+            setLoading(false)
+        })
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (isAuthenticated) refreshProjects()
