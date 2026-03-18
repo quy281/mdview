@@ -21,6 +21,8 @@ export default function BottomNav({
     onPrint,
     onSaveHtml,
     hasDocument,
+    recentDocs,
+    onOpenRecent,
 }) {
     const [activeTab, setActiveTab] = useState('doc')
     const [showPanel, setShowPanel] = useState(false)

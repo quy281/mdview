@@ -18,6 +18,8 @@ export default function Sidebar({
     onClose,
     onLogout,
     loading,
+    recentDocs,
+    onOpenRecent,
 }) {
     const [newProjectName, setNewProjectName] = useState('')
     const [showNewProject, setShowNewProject] = useState(false)
