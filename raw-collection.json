@@ -1,0 +1,30 @@
+{
+  "id": "pbc_989858012",
+  "listRule": "",
+  "viewRule": "",
+  "createRule": "",
+  "updateRule": "",
+  "deleteRule": "",
+  "name": "hoso_projects",
+  "type": "base",
+  "fields": [
+    {
+      "autogeneratePattern": "[a-z0-9]{15}",
+      "hidden": false,
+      "id": "text3208210256",
+      "max": 15,
+      "min": 15,
+      "name": "id",
+      "pattern": "^[a-z0-9]+$",
+      "presentable": false,
+      "primaryKey": true,
+      "required": true,
+      "system": true,
+      "type": "text"
+    }
+  ],
+  "indexes": [],
+  "created": "2026-03-18 13:51:19.881Z",
+  "updated": "2026-03-18 13:51:19.881Z",
+  "system": false
+}

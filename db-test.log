@@ -1,0 +1,27 @@
+1. Authenticating as admin...
+   Auth OK, token valid: true
+2. Checking hoso_projects collection...
+   Schema: undefined
+   ListRule: ""
+   ViewRule: ""
+   CreateRule: ""
+   UpdateRule: ""
+   DeleteRule: ""
+3. Creating test project...
+   Created OK: id=6id4h2qod25mok4 name=undefined
+4. Listing projects...
+   Found 8 projects:
+     - 06l439v0m7cr8qc: undefined
+     - i00hl15q1i98n78: undefined
+     - 3pct6w5b7xtbd6a: undefined
+     - lr4cpd61xciv23q: undefined
+     - tv9td679nh0qn5y: undefined
+     - pb8m222tt6or8l0: undefined
+     - ttr535riww7cm54: undefined
+     - 6id4h2qod25mok4: undefined
+5. Checking hoso_documents collection...
+   Schema: undefined
+   CreateRule: ""
+6. Testing guest create (no auth)...
+   Guest create OK: h1r2tn9p1u95rak
+DONE

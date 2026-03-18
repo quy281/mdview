@@ -1,0 +1,7 @@
+hoso_documents fields: ["id:text","project_id:text","fileName:text","content:editor","type:select"]
+Created project: o66771ye15s4k8i name=Hồ Sơ Test
+Created doc: ww4h2hbvlze9h93 fileName=test.md type=md
+All projects: Hồ Sơ Test
+Docs in project: test.md
+Cleaned up test data
+ALL VERIFICATION PASSED
