@@ -114,13 +114,26 @@ export async function deleteDocument(projectId, docId) {
 // ── Real-time Subscriptions ───────────────────────
 
 export function subscribeToChanges(onUpdate) {
-    const handler = () => debouncedCallback(onUpdate)
+    let cancelled = false
+    const handler = () => {
+        if (!cancelled) debouncedCallback(onUpdate)
+    }
 
-    pb.collection(PROJECTS_COLLECTION).subscribe('*', handler)
-    pb.collection(DOCS_COLLECTION).subscribe('*', handler)
+    // Subscribe async but don't block — store promises for cleanup
+    const subPromises = []
+    subPromises.push(
+        pb.collection(PROJECTS_COLLECTION).subscribe('*', handler)
+            .catch(err => console.warn('Failed to subscribe to projects:', err))
+    )
+    subPromises.push(
+        pb.collection(DOCS_COLLECTION).subscribe('*', handler)
+            .catch(err => console.warn('Failed to subscribe to documents:', err))
+    )
 
+    // Return sync cleanup function
     return () => {
-        pb.collection(PROJECTS_COLLECTION).unsubscribe('*')
-        pb.collection(DOCS_COLLECTION).unsubscribe('*')
+        cancelled = true
+        pb.collection(PROJECTS_COLLECTION).unsubscribe('*').catch(() => { })
+        pb.collection(DOCS_COLLECTION).unsubscribe('*').catch(() => { })
     }
 }

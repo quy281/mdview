@@ -71,8 +71,10 @@ export default function App() {
 
     useEffect(() => {
         if (!isAuthenticated) return
-        const unsubscribe = subscribeToChanges(() => refreshProjects())
-        return () => unsubscribe()
+        const cleanup = subscribeToChanges(() => {
+            refreshProjects()
+        })
+        return cleanup
     }, [isAuthenticated, refreshProjects])
 
     // — Project CRUD (optimistic) —
@@ -240,7 +242,7 @@ export default function App() {
     }
 
     return (
-        <div className="flex min-h-screen min-h-dvh">
+        <div className="flex min-h-screen min-h-dvh overflow-x-hidden max-w-[100vw]">
             {/* Desktop sidebar */}
             <div className="hidden md:block">
                 <Sidebar
