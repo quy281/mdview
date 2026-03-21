@@ -1,13 +1,16 @@
 import { useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import DOMPurify from 'dompurify'
 import AnnotationCanvas from './AnnotationCanvas'
+import TextHighlighter from './TextHighlighter'
 
 /**
- * Paper – A4 sheet simulator with annotation overlay.
+ * Paper – A4 sheet simulator with annotation overlay + text highlighting.
  * Renders document content in a print-ready, Calibri-typography container.
+ * Supports: md, docx, html types.
  */
-export default function Paper({ document, annotationActive }) {
+export default function Paper({ document, annotationActive, onHighlight }) {
     const paperRef = useRef(null)
 
     if (!document) {
@@ -33,11 +36,16 @@ export default function Paper({ document, annotationActive }) {
                         <polyline points="10 9 9 9 8 9" />
                     </svg>
                     <p className="text-lg">Chưa có tài liệu</p>
-                    <p className="text-sm mt-1">Kéo thả file .md hoặc .docx vào đây</p>
+                    <p className="text-sm mt-1">Kéo thả file .md, .docx hoặc .html vào đây</p>
                 </div>
             </div>
         )
     }
+
+    // Sanitize HTML content for docx & html types
+    const sanitizedHtml = (document.type === 'docx' || document.type === 'html')
+        ? DOMPurify.sanitize(document.content, { ADD_TAGS: ['style'], ADD_ATTR: ['style', 'class'] })
+        : ''
 
     return (
         <div className="paper-wrapper" ref={paperRef}>
@@ -47,10 +55,18 @@ export default function Paper({ document, annotationActive }) {
                         {document.content}
                     </ReactMarkdown>
                 ) : (
-                    <div dangerouslySetInnerHTML={{ __html: document.content }} />
+                    <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
                 )}
             </div>
 
+            {/* Text highlighting toolbar (shows on text selection) */}
+            <TextHighlighter
+                paperId="paper-content"
+                isActive={annotationActive}
+                onHighlight={onHighlight}
+            />
+
+            {/* Drawing canvas overlay */}
             <AnnotationCanvas
                 fileName={document.fileName}
                 containerRef={paperRef}

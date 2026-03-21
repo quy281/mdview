@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react'
 
 /**
- * Sidebar – Project navigation with CRUD, document list, file upload.
+ * Sidebar – Project navigation with CRUD, document list, file upload, view tabs.
  * Responsive: drawer overlay on mobile, fixed panel on desktop.
+ * No login/logout — public access.
  */
 export default function Sidebar({
     projects,
@@ -16,10 +17,11 @@ export default function Sidebar({
     currentFile,
     isOpen,
     onClose,
-    onLogout,
     loading,
     recentDocs,
     onOpenRecent,
+    currentView,
+    onChangeView,
 }) {
     const [newProjectName, setNewProjectName] = useState('')
     const [showNewProject, setShowNewProject] = useState(false)
@@ -45,6 +47,8 @@ export default function Sidebar({
         ? projects.find((p) => p.id === selectedProject)?.documents || []
         : []
 
+    const totalDocs = projects.reduce((sum, p) => sum + (p.documents?.length || 0), 0)
+
     return (
         <>
             {/* Mobile backdrop */}
@@ -62,7 +66,7 @@ export default function Sidebar({
                         >
                             HoSo Reader
                         </h1>
-                        <p className="text-xs text-gray-500 mt-0.5">Document Viewer & Print</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Document Viewer & Manager</p>
                     </div>
                     <button
                         onClick={onClose}
@@ -73,6 +77,27 @@ export default function Sidebar({
                             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
                     </button>
+                </div>
+
+                {/* View Tabs */}
+                <div className="flex border-b border-gray-200">
+                    {[
+                        { key: 'reader', icon: '📖', label: 'Đọc' },
+                        { key: 'files', icon: '📂', label: 'File' },
+                        { key: 'notes', icon: '📝', label: 'Ghi chú' },
+                    ].map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => { onChangeView?.(tab.key); onClose?.() }}
+                            className={`flex-1 py-2.5 text-xs font-semibold cursor-pointer transition-colors
+                                ${currentView === tab.key
+                                    ? 'bg-gray-800 text-white'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                                }`}
+                        >
+                            {tab.icon} {tab.label}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Upload button */}
@@ -160,7 +185,7 @@ export default function Sidebar({
                                         <span>{project.id === selectedProject ? '📂' : '📁'}</span>
                                         <span className="truncate">{project.name}</span>
                                         <span className="ml-auto text-xs opacity-60">
-                                            {project.documents.length}
+                                            {project.documents?.length || 0}
                                         </span>
                                     </button>
                                     <button
@@ -182,7 +207,7 @@ export default function Sidebar({
                                 </div>
 
                                 {/* Documents in selected project */}
-                                {project.id === selectedProject && project.documents.length > 0 && (
+                                {project.id === selectedProject && project.documents?.length > 0 && (
                                     <ul className="ml-4 mt-0.5 mb-1 border-l-2 border-gray-200 pl-2">
                                         {project.documents.map((doc) => (
                                             <li key={doc.id} className="group/doc flex items-center">
@@ -198,7 +223,7 @@ export default function Sidebar({
                                                             : 'text-gray-700 hover:text-ink hover:bg-gray-50'
                                                         }`}
                                                 >
-                                                    <span>{doc.type === 'md' ? '📝' : '📄'}</span>
+                                                    <span>{doc.type === 'md' ? '📝' : doc.type === 'html' ? '🌐' : '📄'}</span>
                                                     <span className="truncate">{doc.fileName}</span>
                                                 </button>
                                                 <button
@@ -243,7 +268,7 @@ export default function Sidebar({
                                         onClick={() => onOpenRecent && onOpenRecent(r)}
                                         className="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 cursor-pointer flex items-center gap-2 truncate"
                                     >
-                                        <span>{r.type === 'md' ? '📝' : '📄'}</span>
+                                        <span>{r.type === 'md' ? '📝' : r.type === 'html' ? '🌐' : '📄'}</span>
                                         <span className="truncate">{r.fileName}</span>
                                     </button>
                                 </li>
@@ -253,16 +278,10 @@ export default function Sidebar({
                 )}
 
                 {/* Footer */}
-                <div className="px-4 py-3 border-t border-gray-300 flex items-center justify-between">
+                <div className="px-4 py-3 border-t border-gray-300">
                     <p className="text-xs text-gray-500">
-                        HoSo Reader v1.0 • {projects.length} dự án
+                        HoSo Reader v2.0 • {projects.length} dự án • {totalDocs} file
                     </p>
-                    <button
-                        onClick={onLogout}
-                        className="text-xs text-red-600 hover:text-red-800 font-medium cursor-pointer"
-                    >
-                        Đăng xuất
-                    </button>
                 </div>
             </aside>
         </>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hoso-reader-v1';
+const CACHE_NAME = 'hoso-reader-v2';
 const STATIC_ASSETS = [
     '/',
     '/index.html',

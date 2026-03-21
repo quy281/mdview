@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import { processFile } from '../utils/fileProcessor'
 
 /**
- * FileDropper – Drag-and-drop zone for .md and .docx files.
+ * FileDropper – Drag-and-drop zone for .md, .docx, and .html files.
  * Supports multi-file selection. Requires a project to be selected.
  */
 export default function FileDropper({ onFilesProcessed, projectName, className = '' }) {
@@ -74,7 +74,7 @@ export default function FileDropper({ onFilesProcessed, projectName, className =
             <input
                 ref={inputRef}
                 type="file"
-                accept=".md,.markdown,.docx"
+                accept=".md,.markdown,.docx,.html,.htm"
                 multiple
                 onChange={handleInputChange}
                 className="hidden"
@@ -117,7 +117,7 @@ export default function FileDropper({ onFilesProcessed, projectName, className =
                                 </p>
                             )}
                             <p className="text-sm mt-1 opacity-60">
-                                Hỗ trợ: .md, .docx (chọn nhiều file cùng lúc)
+                                Hỗ trợ: .md, .docx, .html (chọn nhiều file cùng lúc)
                             </p>
                         </div>
                     </>

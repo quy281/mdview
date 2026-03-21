@@ -2,8 +2,8 @@ import { useState, useRef } from 'react'
 
 /**
  * BottomNav – Mobile/Tablet bottom navigation bar.
- * Tabs: Document view, Projects, Upload, Tools.
- * Optimized for touch: large tap targets, thumb-friendly placement.
+ * Tabs: Document view, Projects, Upload, Files, Notes, Tools.
+ * No login/logout — public access.
  */
 export default function BottomNav({
     projects,
@@ -14,7 +14,6 @@ export default function BottomNav({
     onSelectDocument,
     onDeleteDocument,
     onUploadClick,
-    onLogout,
     currentFile,
     annotationActive,
     onAnnotationToggle,
@@ -23,6 +22,8 @@ export default function BottomNav({
     hasDocument,
     recentDocs,
     onOpenRecent,
+    currentView,
+    onChangeView,
 }) {
     const [activeTab, setActiveTab] = useState('doc')
     const [showPanel, setShowPanel] = useState(false)
@@ -34,6 +35,19 @@ export default function BottomNav({
         if (tab === 'doc') {
             setShowPanel(false)
             setActiveTab('doc')
+            onChangeView?.('reader')
+            return
+        }
+        if (tab === 'files') {
+            setShowPanel(false)
+            setActiveTab('files')
+            onChangeView?.('files')
+            return
+        }
+        if (tab === 'notes') {
+            setShowPanel(false)
+            setActiveTab('notes')
+            onChangeView?.('notes')
             return
         }
         if (activeTab === tab && showPanel) {
@@ -51,10 +65,6 @@ export default function BottomNav({
             setShowNewProject(false)
         }
     }
-
-    const selectedDocs = selectedProject
-        ? projects.find((p) => p.id === selectedProject)?.documents || []
-        : []
 
     return (
         <div className="md:hidden no-print">
@@ -121,7 +131,7 @@ export default function BottomNav({
                                                 >
                                                     <span>{project.id === selectedProject ? '📂' : '📁'}</span>
                                                     <span className="flex-1 truncate">{project.name}</span>
-                                                    <span className="text-xs opacity-60">{project.documents.length}</span>
+                                                    <span className="text-xs opacity-60">{project.documents?.length || 0}</span>
                                                 </button>
                                                 <button
                                                     onClick={() => {
@@ -133,8 +143,7 @@ export default function BottomNav({
                                                 </button>
                                             </div>
 
-                                            {/* Documents in selected project */}
-                                            {project.id === selectedProject && project.documents.length > 0 && (
+                                            {project.id === selectedProject && project.documents?.length > 0 && (
                                                 <ul className="ml-4 mt-1 mb-2 border-l-2 border-gray-200 pl-3">
                                                     {project.documents.map((doc) => (
                                                         <li key={doc.id} className="flex items-center gap-1">
@@ -143,11 +152,12 @@ export default function BottomNav({
                                                                     onSelectDocument(doc)
                                                                     setShowPanel(false)
                                                                     setActiveTab('doc')
+                                                                    onChangeView?.('reader')
                                                                 }}
                                                                 className={`flex-1 text-left px-2 py-2.5 text-sm cursor-pointer truncate
                                            ${currentFile === doc.fileName ? 'font-bold' : 'text-gray-600'}`}
                                                             >
-                                                                {doc.type === 'md' ? '📝' : '📄'} {doc.fileName}
+                                                                {doc.type === 'md' ? '📝' : doc.type === 'html' ? '🌐' : '📄'} {doc.fileName}
                                                             </button>
                                                             <button
                                                                 onClick={() => onDeleteDocument(project.id, doc.id)}
@@ -177,7 +187,7 @@ export default function BottomNav({
                              disabled:opacity-30
                              ${annotationActive ? 'bg-ink text-paper border-ink' : 'border-gray-300 active:bg-gray-100'}`}
                                 >
-                                    ✏️ {annotationActive ? 'Tắt ghi chú' : 'Bật ghi chú'}
+                                    ✏️ {annotationActive ? 'Tắt ghi chú / highlight' : 'Bật ghi chú / highlight'}
                                 </button>
 
                                 <button
@@ -209,10 +219,10 @@ export default function BottomNav({
                 <button
                     onClick={() => handleTabClick('doc')}
                     className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs cursor-pointer
-                     ${activeTab === 'doc' && !showPanel ? 'text-ink font-bold' : 'text-gray-500'}`}
+                     ${currentView === 'reader' && !showPanel ? 'text-ink font-bold' : 'text-gray-500'}`}
                 >
                     <span className="text-lg">📄</span>
-                    <span>Tài liệu</span>
+                    <span>Đọc</span>
                 </button>
 
                 <button
@@ -230,6 +240,24 @@ export default function BottomNav({
                 >
                     <span className="text-lg">⬆️</span>
                     <span>Tải lên</span>
+                </button>
+
+                <button
+                    onClick={() => handleTabClick('files')}
+                    className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs cursor-pointer
+                     ${currentView === 'files' ? 'text-ink font-bold' : 'text-gray-500'}`}
+                >
+                    <span className="text-lg">📂</span>
+                    <span>File</span>
+                </button>
+
+                <button
+                    onClick={() => handleTabClick('notes')}
+                    className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs cursor-pointer
+                     ${currentView === 'notes' ? 'text-ink font-bold' : 'text-gray-500'}`}
+                >
+                    <span className="text-lg">📝</span>
+                    <span>Ghi chú</span>
                 </button>
 
                 <button
