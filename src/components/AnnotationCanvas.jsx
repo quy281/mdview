@@ -1,28 +1,74 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 
 /**
- * AnnotationCanvas – Transparent overlay for handwritten notes on Paper.
- * Supports pen, highlighter, eraser with pressure sensitivity.
- * Persists strokes to localStorage keyed by fileName.
+ * AnnotationCanvas – Smooth drawing overlay.
+ * - Pointer capture → no missed strokes even when moving fast
+ * - requestAnimationFrame render loop → zero lag
+ * - touch-action: pan-y → finger scrolls, pen/mouse draws
+ * - Tools: pencil (pressure-sensitive), highlighter, eraser
+ * - Color picker for pencil & highlighter
  */
 
+const PRESET_COLORS = [
+    '#000000', // đen
+    '#ef4444', // đỏ
+    '#f97316', // cam
+    '#eab308', // vàng
+    '#22c55e', // xanh lá
+    '#3b82f6', // xanh dương
+    '#8b5cf6', // tím
+    '#ec4899', // hồng
+]
+
 const TOOLS = {
-    pen: { color: '#000000', width: 2, opacity: 1, composite: 'source-over' },
-    highlighter: { color: '#fde047', width: 16, opacity: 0.35, composite: 'source-over' },
-    eraser: { color: '#ffffff', width: 20, opacity: 1, composite: 'destination-out' },
+    pencil: {
+        label: 'Bút chì',
+        icon: '✏️',
+        baseWidth: 2,
+        opacity: 1,
+        composite: 'source-over',
+        pressureSensitive: true,
+        lineCap: 'round',
+    },
+    highlighter: {
+        label: 'Highlight',
+        icon: '🖍️',
+        baseWidth: 18,
+        opacity: 0.35,
+        composite: 'multiply',
+        pressureSensitive: false,
+        lineCap: 'square',
+    },
+    eraser: {
+        label: 'Tẩy',
+        icon: '🧹',
+        baseWidth: 24,
+        opacity: 1,
+        composite: 'destination-out',
+        pressureSensitive: false,
+        lineCap: 'round',
+    },
 }
 
-const SIZES = [2, 4, 8]
+const SIZE_MULTIPLIERS = [0.6, 1, 2]
+const SIZE_LABELS = ['S', 'M', 'L']
 
 export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
     const canvasRef = useRef(null)
-    const [tool, setTool] = useState('pen')
-    const [sizeIdx, setSizeIdx] = useState(0)
+    const [tool, setTool] = useState('pencil')
+    const [sizeIdx, setSizeIdx] = useState(1)
+    const [color, setColor] = useState('#000000')
+    const [showColorPicker, setShowColorPicker] = useState(false)
+
+    // Drawing state – all in refs for performance (no re-render during draw)
     const isDrawing = useRef(false)
     const lastPoint = useRef(null)
+    const pendingRaf = useRef(null)
+    const pendingSegment = useRef(null) // { prev, point, toolSnap, colorSnap, sizeIdxSnap }
+
     const strokesKey = `hoso-annotations-${fileName || 'untitled'}`
 
-    // Resize canvas to match container
+    // ── Canvas sizing ──────────────────────────────────────────────────────
     const resizeCanvas = useCallback(() => {
         const canvas = canvasRef.current
         const container = containerRef?.current
@@ -31,31 +77,32 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         const rect = container.getBoundingClientRect()
         const dpr = window.devicePixelRatio || 1
 
-        // Save current drawing
+        // Save current drawing before resize
         const imageData = canvas.width > 0 ? canvas.toDataURL() : null
 
-        canvas.width = rect.width * dpr
-        canvas.height = rect.height * dpr
+        canvas.width = Math.round(rect.width * dpr)
+        canvas.height = Math.round(rect.height * dpr)
         canvas.style.width = rect.width + 'px'
         canvas.style.height = rect.height + 'px'
 
         const ctx = canvas.getContext('2d')
         ctx.scale(dpr, dpr)
 
-        // Restore drawing
         if (imageData) {
             const img = new Image()
             img.onload = () => {
-                ctx.drawImage(img, 0, 0, rect.width, rect.height)
+                const c = canvasRef.current
+                if (!c) return
+                const cx = c.getContext('2d')
+                cx.drawImage(img, 0, 0, rect.width, rect.height)
             }
             img.src = imageData
         }
     }, [containerRef])
 
-    // Load saved annotations
+    // Load saved image
     useEffect(() => {
         if (!isActive || !fileName) return
-
         const saved = localStorage.getItem(strokesKey)
         if (saved && canvasRef.current) {
             const img = new Image()
@@ -74,24 +121,19 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
     useEffect(() => {
         if (!isActive) return
         resizeCanvas()
+        const ro = new ResizeObserver(() => resizeCanvas())
+        if (containerRef?.current) ro.observe(containerRef.current)
+        return () => ro.disconnect()
+    }, [isActive, resizeCanvas, containerRef])
 
-        const handleResize = () => resizeCanvas()
-        window.addEventListener('resize', handleResize)
-        return () => window.removeEventListener('resize', handleResize)
-    }, [isActive, resizeCanvas])
-
-    // Save to localStorage
+    // ── Save ──────────────────────────────────────────────────────────────
     const saveAnnotations = useCallback(() => {
         const canvas = canvasRef.current
         if (!canvas || !fileName) return
-        try {
-            localStorage.setItem(strokesKey, canvas.toDataURL())
-        } catch {
-            // localStorage full — silently fail
-        }
+        try { localStorage.setItem(strokesKey, canvas.toDataURL()) } catch { /* full */ }
     }, [fileName, strokesKey])
 
-    // Drawing handlers
+    // ── Point helper ──────────────────────────────────────────────────────
     const getPoint = useCallback((e) => {
         const canvas = canvasRef.current
         if (!canvas) return null
@@ -99,62 +141,92 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         return {
             x: e.clientX - rect.left,
             y: e.clientY - rect.top,
-            pressure: e.pressure || 0.5,
+            pressure: (e.pressure > 0 ? e.pressure : 0.5),
         }
     }, [])
 
+    // ── RAF render ────────────────────────────────────────────────────────
+    const flushSegment = useCallback(() => {
+        pendingRaf.current = null
+        const seg = pendingSegment.current
+        if (!seg) return
+        pendingSegment.current = null
+
+        const canvas = canvasRef.current
+        if (!canvas) return
+        const ctx = canvas.getContext('2d')
+        const { prev, point, toolConfig, colorVal, width } = seg
+
+        ctx.save()
+        ctx.globalCompositeOperation = toolConfig.composite
+        ctx.globalAlpha = toolConfig.opacity
+        ctx.strokeStyle = toolConfig.composite === 'destination-out' ? 'rgba(0,0,0,1)' : colorVal
+        ctx.lineWidth = width
+        ctx.lineCap = toolConfig.lineCap
+        ctx.lineJoin = 'round'
+
+        ctx.beginPath()
+        ctx.moveTo(prev.x, prev.y)
+        // Smooth curve through midpoint
+        const mx = (prev.x + point.x) / 2
+        const my = (prev.y + point.y) / 2
+        ctx.quadraticCurveTo(prev.x, prev.y, mx, my)
+        ctx.stroke()
+        ctx.restore()
+    }, [])
+
+    // ── Pointer events ────────────────────────────────────────────────────
     const startDraw = useCallback((e) => {
-        // Chỉ vẽ khi dùng bút (stylus). Tay chạm → bỏ qua để scroll hoạt động.
+        // Finger touch → let browser scroll
         if (e.pointerType === 'touch') return
+
         e.preventDefault()
+        e.currentTarget.setPointerCapture(e.pointerId)
+
         isDrawing.current = true
         lastPoint.current = getPoint(e)
     }, [getPoint])
 
     const draw = useCallback((e) => {
-        if (!isDrawing.current) return
-        if (e.pointerType === 'touch') return
+        if (!isDrawing.current || e.pointerType === 'touch') return
         e.preventDefault()
 
-        const canvas = canvasRef.current
-        if (!canvas) return
-        const ctx = canvas.getContext('2d')
         const point = getPoint(e)
         const prev = lastPoint.current
         if (!point || !prev) return
 
         const toolConfig = TOOLS[tool]
-        const pressureMultiplier = tool === 'pen' ? (point.pressure * 1.5 + 0.5) : 1
-        const strokeWidth = SIZES[sizeIdx] * pressureMultiplier
+        const pressure = toolConfig.pressureSensitive ? point.pressure : 0.5
+        const width = TOOLS[tool].baseWidth * SIZE_MULTIPLIERS[sizeIdx] * (pressure * 1.2 + 0.4)
 
-        ctx.globalCompositeOperation = toolConfig.composite
-        ctx.globalAlpha = toolConfig.opacity
-        ctx.strokeStyle = toolConfig.color
-        ctx.lineWidth = tool === 'eraser' ? SIZES[sizeIdx] * 3 : strokeWidth
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-
-        ctx.beginPath()
-        ctx.moveTo(prev.x, prev.y)
-        ctx.lineTo(point.x, point.y)
-        ctx.stroke()
-
-        // Reset compositing
-        ctx.globalCompositeOperation = 'source-over'
-        ctx.globalAlpha = 1
-
+        // Queue RAF render
+        pendingSegment.current = { prev, point, toolConfig, colorVal: color, width }
         lastPoint.current = point
-    }, [tool, sizeIdx, getPoint])
 
-    const endDraw = useCallback(() => {
-        if (isDrawing.current) {
-            isDrawing.current = false
-            lastPoint.current = null
-            saveAnnotations()
+        if (!pendingRaf.current) {
+            pendingRaf.current = requestAnimationFrame(flushSegment)
         }
-    }, [saveAnnotations])
+    }, [tool, sizeIdx, color, getPoint, flushSegment])
 
+    const endDraw = useCallback((e) => {
+        if (!isDrawing.current) return
+        isDrawing.current = false
+        lastPoint.current = null
+
+        // Flush any pending segment
+        if (pendingRaf.current) {
+            cancelAnimationFrame(pendingRaf.current)
+            pendingRaf.current = null
+            flushSegment()
+        }
+        pendingSegment.current = null
+
+        saveAnnotations()
+    }, [saveAnnotations, flushSegment])
+
+    // ── Clear all ──────────────────────────────────────────────────────────
     const clearAll = useCallback(() => {
+        if (!confirm('Xóa toàn bộ ghi chú tay?')) return
         const canvas = canvasRef.current
         if (!canvas) return
         const ctx = canvas.getContext('2d')
@@ -164,59 +236,119 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
 
     if (!isActive) return null
 
+    const currentTool = TOOLS[tool]
+
     return (
         <>
-            {/* Annotation toolbar */}
+            {/* Toolbar */}
             <div className="annotation-toolbar no-print">
-                <button
-                    className={tool === 'pen' ? 'active' : ''}
-                    onClick={() => setTool('pen')}
-                    title="Bút vẽ"
-                >
-                    ✏️
-                </button>
-                <button
-                    className={tool === 'highlighter' ? 'active' : ''}
-                    onClick={() => setTool('highlighter')}
-                    title="Bút highlight"
-                >
-                    🖍️
-                </button>
-                <button
-                    className={tool === 'eraser' ? 'active' : ''}
-                    onClick={() => setTool('eraser')}
-                    title="Tẩy"
-                >
-                    🧹
-                </button>
 
-                <span className="mx-1 text-gray-300">|</span>
-
-                {SIZES.map((size, idx) => (
+                {/* Tool buttons */}
+                {Object.entries(TOOLS).map(([key, cfg]) => (
                     <button
-                        key={size}
+                        key={key}
+                        className={tool === key ? 'active' : ''}
+                        onClick={() => setTool(key)}
+                        title={cfg.label}
+                    >
+                        {cfg.icon}
+                    </button>
+                ))}
+
+                <span className="ann-divider" />
+
+                {/* Size */}
+                {SIZE_MULTIPLIERS.map((_, idx) => (
+                    <button
+                        key={idx}
                         className={sizeIdx === idx ? 'active' : ''}
                         onClick={() => setSizeIdx(idx)}
-                        title={`${size}px`}
+                        title={SIZE_LABELS[idx]}
+                        style={{ minWidth: 30 }}
                     >
                         <span style={{
                             display: 'inline-block',
-                            width: Math.max(size * 2, 6),
-                            height: Math.max(size * 2, 6),
+                            width: 6 + idx * 4,
+                            height: 6 + idx * 4,
                             borderRadius: '50%',
-                            background: sizeIdx === idx ? 'var(--color-paper)' : 'var(--color-ink)',
+                            background: sizeIdx === idx
+                                ? 'var(--color-paper)'
+                                : (tool === 'eraser' ? 'var(--color-gray-500)' : color),
+                            border: sizeIdx !== idx ? '1px solid var(--color-gray-300)' : 'none',
                         }} />
                     </button>
                 ))}
 
-                <span className="mx-1 text-gray-300">|</span>
+                <span className="ann-divider" />
 
-                <button onClick={clearAll} title="Xoá tất cả">
-                    🗑️
-                </button>
+                {/* Color picker – hidden for eraser */}
+                {tool !== 'eraser' && (
+                    <div style={{ position: 'relative' }}>
+                        <button
+                            onClick={() => setShowColorPicker(v => !v)}
+                            title="Chọn màu"
+                            style={{ padding: '4px 6px' }}
+                        >
+                            <span style={{
+                                display: 'inline-block',
+                                width: 18,
+                                height: 18,
+                                borderRadius: 3,
+                                background: color,
+                                border: '2px solid var(--color-gray-300)',
+                            }} />
+                        </button>
+
+                        {showColorPicker && (
+                            <div
+                                className="ann-color-picker"
+                                onPointerDown={e => e.stopPropagation()}
+                            >
+                                {PRESET_COLORS.map(c => (
+                                    <button
+                                        key={c}
+                                        onClick={() => { setColor(c); setShowColorPicker(false) }}
+                                        className={color === c ? 'active' : ''}
+                                        style={{
+                                            width: 28,
+                                            height: 28,
+                                            background: c,
+                                            border: color === c
+                                                ? '3px solid var(--color-gray-900)'
+                                                : '2px solid var(--color-gray-300)',
+                                            borderRadius: 4,
+                                            padding: 0,
+                                        }}
+                                        title={c}
+                                    />
+                                ))}
+                                {/* Native color picker for custom color */}
+                                <label title="Màu tùy chỉnh" style={{
+                                    width: 28, height: 28, display: 'flex',
+                                    alignItems: 'center', justifyContent: 'center',
+                                    border: '2px dashed var(--color-gray-300)',
+                                    borderRadius: 4, cursor: 'pointer', fontSize: 14,
+                                }}>
+                                    🎨
+                                    <input
+                                        type="color"
+                                        value={color}
+                                        onChange={e => setColor(e.target.value)}
+                                        style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+                                    />
+                                </label>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <span className="ann-divider" />
+
+                {/* Clear */}
+                <button onClick={clearAll} title="Xóa tất cả">🗑️</button>
             </div>
 
-            {/* Canvas overlay */}
+            {/* Canvas – touch-action pan-y lets finger scroll, pen/mouse draws */}
             <canvas
                 ref={canvasRef}
                 className={`annotation-canvas ${tool === 'eraser' ? 'eraser' : ''}`}
@@ -224,9 +356,16 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
                 onPointerDown={startDraw}
                 onPointerMove={draw}
                 onPointerUp={endDraw}
-                onPointerLeave={endDraw}
                 onPointerCancel={endDraw}
             />
+
+            {/* Click-outside to close color picker */}
+            {showColorPicker && (
+                <div
+                    style={{ position: 'fixed', inset: 0, zIndex: 0 }}
+                    onClick={() => setShowColorPicker(false)}
+                />
+            )}
         </>
     )
 }
