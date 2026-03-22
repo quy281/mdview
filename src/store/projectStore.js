@@ -21,36 +21,30 @@ function lsGet(key) {
     try { return JSON.parse(localStorage.getItem(key) || '[]') } catch { return [] }
 }
 function lsSet(key, data) {
-    try { localStorage.setItem(key, JSON.stringify(data)) } catch { /* full */ }
+    try { localStorage.setItem(key, JSON.stringify(data)) } catch { /* storage full */ }
 }
 function generateId() {
     return 'ls_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
 }
 
-// Debounce for real-time subscriptions
-let refreshTimer = null
-function debouncedCallback(callback, delay = 100) {
-    clearTimeout(refreshTimer)
-    refreshTimer = setTimeout(callback, delay)
-}
-
-// Check if PocketBase is reachable (lightweight)
-async function isPBAvailable() {
-    try {
-        await pb.health.check()
-        return true
-    } catch {
-        return false
+// Per-call debounce (no global timer leak)
+function makeDebounced(delay = 100) {
+    let timer = null
+    return (fn) => {
+        clearTimeout(timer)
+        timer = setTimeout(fn, delay)
     }
 }
 
 // ── Projects ──────────────────────────────────────
 
 export async function getProjects() {
-    // Always try PocketBase first (no permanent lock)
     try {
-        const projects = await pb.collection(PROJECTS_COLLECTION).getFullList()
-        const docs = await pb.collection(DOCS_COLLECTION).getFullList()
+        // FIX #6: Fetch projects + docs in parallel
+        const [projects, docs] = await Promise.all([
+            pb.collection(PROJECTS_COLLECTION).getFullList(),
+            pb.collection(DOCS_COLLECTION).getFullList(),
+        ])
 
         projects.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
         docs.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
@@ -70,7 +64,7 @@ export async function getProjects() {
                 })),
         }))
 
-        // Sync to localStorage as backup — including document content
+        // Sync to localStorage as backup
         lsSet(LS_PROJECTS, result.map(p => ({ id: p.id, name: p.name, createdAt: p.createdAt })))
         lsSet(LS_DOCS, result.flatMap(p =>
             p.documents.map(d => ({ ...d, project_id: p.id }))
@@ -99,7 +93,6 @@ export async function createProject(name) {
         console.warn('PB create project failed, using localStorage:', err.message)
     }
 
-    // localStorage
     const project = { id: generateId(), name: trimmed, createdAt: new Date().toISOString() }
     const projects = lsGet(LS_PROJECTS)
     projects.unshift(project)
@@ -109,21 +102,25 @@ export async function createProject(name) {
 
 export async function deleteProject(id) {
     try {
-        const docs = await pb.collection(DOCS_COLLECTION).getFullList({
-            filter: `project_id = "${id}"`,
-        })
-        for (const doc of docs) {
-            await pb.collection(DOCS_COLLECTION).delete(doc.id)
-        }
+        // FIX #5: Also delete annotations for this project
+        const [docs, annotations] = await Promise.all([
+            pb.collection(DOCS_COLLECTION).getFullList({ filter: `project_id = "${id}"` }),
+            pb.collection(ANNOTATIONS_COLLECTION).getFullList({ filter: `project_id = "${id}"` }),
+        ])
+        await Promise.all([
+            ...docs.map(doc => pb.collection(DOCS_COLLECTION).delete(doc.id)),
+            ...annotations.map(ann => pb.collection(ANNOTATIONS_COLLECTION).delete(ann.id)),
+        ])
         await pb.collection(PROJECTS_COLLECTION).delete(id)
         return
     } catch (err) {
         console.warn('PB delete project failed, deleting from localStorage:', err.message)
     }
 
-    // localStorage
+    // localStorage — also clean up annotations
     lsSet(LS_PROJECTS, lsGet(LS_PROJECTS).filter(p => p.id !== id))
     lsSet(LS_DOCS, lsGet(LS_DOCS).filter(d => d.project_id !== id))
+    lsSet(LS_ANNOTATIONS, lsGet(LS_ANNOTATIONS).filter(a => a.project_id !== id))
 }
 
 // ── Documents ─────────────────────────────────────
@@ -136,7 +133,6 @@ export async function saveDocument(projectId, fileName, content, type) {
             content,
             type,
         })
-        // Also cache to localStorage
         const doc = {
             id: record.id,
             project_id: projectId,
@@ -145,6 +141,7 @@ export async function saveDocument(projectId, fileName, content, type) {
             type: record.type,
             createdAt: record.created,
         }
+        // Cache to localStorage
         const docs = lsGet(LS_DOCS)
         docs.unshift(doc)
         lsSet(LS_DOCS, docs)
@@ -153,7 +150,6 @@ export async function saveDocument(projectId, fileName, content, type) {
         console.warn('PB save document failed, using localStorage:', err.message)
     }
 
-    // localStorage
     const doc = { id: generateId(), project_id: projectId, fileName, content, type, createdAt: new Date().toISOString() }
     const docs = lsGet(LS_DOCS)
     docs.unshift(doc)
@@ -163,12 +159,18 @@ export async function saveDocument(projectId, fileName, content, type) {
 
 export async function deleteDocument(projectId, docId) {
     try {
+        // Also delete annotations for this document
+        const annotations = await pb.collection(ANNOTATIONS_COLLECTION).getFullList({
+            filter: `document_id = "${docId}"`,
+        })
+        await Promise.all(annotations.map(a => pb.collection(ANNOTATIONS_COLLECTION).delete(a.id)))
         await pb.collection(DOCS_COLLECTION).delete(docId)
     } catch (err) {
         console.warn('PB delete doc failed:', err.message)
     }
-    // Always clean localStorage too
+    // Always clean localStorage too (including annotations for this doc)
     lsSet(LS_DOCS, lsGet(LS_DOCS).filter(d => d.id !== docId))
+    lsSet(LS_ANNOTATIONS, lsGet(LS_ANNOTATIONS).filter(a => a.document_id !== docId))
 }
 
 // ── Annotations ───────────────────────────────────
@@ -265,8 +267,10 @@ export async function deleteAnnotation(id) {
 
 export function subscribeToChanges(onUpdate) {
     let cancelled = false
+    // FIX #4: per-subscription debounce, not global
+    const debounced = makeDebounced(100)
     const handler = () => {
-        if (!cancelled) debouncedCallback(onUpdate)
+        if (!cancelled) debounced(onUpdate)
     }
 
     pb.collection(PROJECTS_COLLECTION).subscribe('*', handler)

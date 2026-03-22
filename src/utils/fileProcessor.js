@@ -2,6 +2,7 @@
  * File Processor – Handles .md, .docx, and .html file parsing
  */
 import mammoth from 'mammoth'
+import DOMPurify from 'dompurify'
 
 /**
  * Detect file type from File object
@@ -26,18 +27,19 @@ export async function processMarkdown(file) {
 }
 
 /**
- * Process a .docx file – returns HTML string
+ * Process a .docx file – returns sanitized HTML string
  * @param {File} file
  * @returns {Promise<string>}
  */
 export async function processDocx(file) {
     const arrayBuffer = await file.arrayBuffer()
     const result = await mammoth.convertToHtml({ arrayBuffer })
-    return result.value
+    // FIX #7: Sanitize HTML output from mammoth to prevent XSS
+    return DOMPurify.sanitize(result.value)
 }
 
 /**
- * Process an HTML file – returns raw HTML string
+ * Process an HTML file – returns sanitized HTML string
  * @param {File} file
  * @returns {Promise<string>}
  */
@@ -45,7 +47,9 @@ export async function processHtml(file) {
     const text = await file.text()
     // Extract body content if full HTML document
     const bodyMatch = text.match(/<body[^>]*>([\s\S]*)<\/body>/i)
-    return bodyMatch ? bodyMatch[1] : text
+    const raw = bodyMatch ? bodyMatch[1] : text
+    // FIX #7: Sanitize to prevent XSS from untrusted HTML files
+    return DOMPurify.sanitize(raw)
 }
 
 /**

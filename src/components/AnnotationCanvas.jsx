@@ -104,6 +104,8 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
     }, [])
 
     const startDraw = useCallback((e) => {
+        // Chỉ vẽ khi dùng bút (stylus). Tay chạm → bỏ qua để scroll hoạt động.
+        if (e.pointerType === 'touch') return
         e.preventDefault()
         isDrawing.current = true
         lastPoint.current = getPoint(e)
@@ -111,6 +113,7 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
 
     const draw = useCallback((e) => {
         if (!isDrawing.current) return
+        if (e.pointerType === 'touch') return
         e.preventDefault()
 
         const canvas = canvasRef.current
@@ -217,6 +220,7 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
             <canvas
                 ref={canvasRef}
                 className={`annotation-canvas ${tool === 'eraser' ? 'eraser' : ''}`}
+                style={{ touchAction: 'pan-y' }}
                 onPointerDown={startDraw}
                 onPointerMove={draw}
                 onPointerUp={endDraw}

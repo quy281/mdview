@@ -35,7 +35,7 @@ const VIEW = { READER: 'reader', FILES: 'files', NOTES: 'notes', FOCUS: 'focus' 
 export default function App() {
     const [projects, setProjects] = useState([])
     const [selectedProject, setSelectedProject] = useState(null)
-    const [document, setDocument] = useState(null)
+    const [currentDoc, setCurrentDoc] = useState(null) // FIX #1: renamed from 'document' to avoid shadowing window.document
     const [showDropper, setShowDropper] = useState(true)
     const [annotationActive, setAnnotationActive] = useState(false)
     const [loading, setLoading] = useState(true)
@@ -43,7 +43,16 @@ export default function App() {
     const [currentView, setCurrentView] = useState(VIEW.READER)
     const dropperRef = useRef(null)
 
+    // Alias for readability in handlers (avoid window.document confusion)
+    const document = currentDoc
+    const setDocument = setCurrentDoc
+
+    const isFetchingRef = useRef(false)
+
     const refreshProjects = useCallback(async () => {
+        // FIX: prevent concurrent fetches
+        if (isFetchingRef.current) return
+        isFetchingRef.current = true
         try {
             const data = await getProjects()
             setProjects(data || [])
@@ -51,6 +60,7 @@ export default function App() {
             console.error('refreshProjects error:', err)
         } finally {
             setLoading(false)
+            isFetchingRef.current = false
         }
     }, [])
 
@@ -58,6 +68,23 @@ export default function App() {
     useEffect(() => {
         refreshProjects()
     }, [refreshProjects])
+
+    // Keyboard shortcut: F = enter focus mode
+    useEffect(() => {
+        const onKey = (e) => {
+            if (e.key === 'f' || e.key === 'F') {
+                const tag = e.target.tagName
+                if (tag === 'INPUT' || tag === 'TEXTAREA') return
+                if (currentDoc && currentView === VIEW.READER) {
+                    setCurrentView(VIEW.FOCUS)
+                } else if (currentView === VIEW.FOCUS) {
+                    setCurrentView(VIEW.READER)
+                }
+            }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [currentDoc, currentView])
 
     // Real-time subscriptions
     useEffect(() => {
@@ -116,21 +143,22 @@ export default function App() {
         ))
 
         const last = results[results.length - 1]
-        setDocument({ type: last.type, content: last.content, fileName: last.fileName })
+        setCurrentDoc({ type: last.type, content: last.content, fileName: last.fileName })
         setShowDropper(false)
         setAnnotationActive(false)
         setCurrentView(VIEW.READER)
 
-        for (const result of results) {
-            saveDocument(selectedProject, result.fileName, result.content, result.type)
-        }
-        setTimeout(() => refreshProjects(), 1000)
+        // FIX #2: await all saves in parallel, no hardcoded timeout
+        await Promise.all(
+            results.map(r => saveDocument(selectedProject, r.fileName, r.content, r.type))
+        )
+        await refreshProjects()
     }, [selectedProject, refreshProjects])
 
     // — Document selection —
 
     const handleSelectDocument = useCallback((doc, projectId, projectName) => {
-        setDocument({ type: doc.type, content: doc.content, fileName: doc.fileName })
+        setCurrentDoc({ type: doc.type, content: doc.content, fileName: doc.fileName })
         setShowDropper(false)
         setAnnotationActive(false)
         // Auto-enter focus mode on mobile
@@ -149,7 +177,7 @@ export default function App() {
             const doc = proj.documents.find(d => d.id === recent.id)
             if (doc) {
                 setSelectedProject(proj.id)
-                setDocument({ type: doc.type, content: doc.content, fileName: doc.fileName })
+                setCurrentDoc({ type: doc.type, content: doc.content, fileName: doc.fileName })
                 setShowDropper(false)
                 setAnnotationActive(false)
                 // Auto-enter focus mode on mobile
@@ -165,9 +193,16 @@ export default function App() {
     }, [projects])
 
     const handleDeleteDocument = useCallback(async (projectId, docId) => {
+        // FIX: if the deleted doc is currently open, clear the reader
+        const currentProj = projects.find(p => p.id === projectId)
+        const deletedDoc = currentProj?.documents?.find(d => d.id === docId)
+        if (deletedDoc && deletedDoc.fileName === currentDoc?.fileName) {
+            setCurrentDoc(null)
+            setShowDropper(true)
+        }
         await deleteDocFromStore(projectId, docId)
         await refreshProjects()
-    }, [refreshProjects])
+    }, [refreshProjects, projects, currentDoc])
 
     const handleUploadClick = useCallback(() => {
         setCurrentView(VIEW.READER)
@@ -175,32 +210,41 @@ export default function App() {
         setTimeout(() => dropperRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     }, [])
 
+    const handleEnterFocus = useCallback(() => {
+        if (currentDoc) setCurrentView(VIEW.FOCUS)
+    }, [currentDoc])
+
     const handlePrint = useCallback(() => { window.print() }, [])
 
     // — Highlight / Note handler (shared) —
     const handleHighlight = useCallback((data) => {
-        if (!document) return
+        if (!currentDoc) return
         const proj = projects.find(p => p.id === selectedProject)
+        // FIX #3: guard against null/undefined doc_id (doc may not be saved to PB yet)
+        const docId = proj?.documents?.find(d => d.fileName === currentDoc.fileName)?.id ?? null
+        if (!docId) {
+            console.warn('handleHighlight: document_id not found, annotation will be saved without PB link')
+        }
         saveAnnotation({
-            document_id: selectedProject ? proj?.documents?.find(d => d.fileName === document.fileName)?.id : null,
+            document_id: docId,
             project_id: selectedProject,
             type: data.type || 'highlight',
             text: data.text,
             color: data.color || '#fde047',
             note: data.note || '',
-            fileName: data.fileName || document.fileName,
+            fileName: data.fileName || currentDoc.fileName,
         })
-    }, [document, projects, selectedProject])
+    }, [currentDoc, projects, selectedProject])
 
     // — Export HTML —
     const handleExportHtml = useCallback((doc) => {
         const content = doc?.content || ''
-        const fileName = doc?.fileName || document?.fileName || 'document'
+        const fileName = doc?.fileName || currentDoc?.fileName || 'document'
 
         // For MD, render to simple HTML; for HTML/docx, use content directly
         let bodyHtml = content
-        if (doc?.type === 'md' || (!doc && document?.type === 'md')) {
-            // Simple markdown → HTML for export (basic)
+        if (doc?.type === 'md' || (!doc && currentDoc?.type === 'md')) {
+            // Use rendered DOM content for accurate MD export
             const paperEl = window.document.getElementById('paper-content')
             if (paperEl) bodyHtml = paperEl.innerHTML
         }
@@ -243,7 +287,7 @@ export default function App() {
         a.download = fileName.replace(/\.(md|docx|html|htm)$/i, '') + '.html'
         a.click()
         URL.revokeObjectURL(url)
-    }, [document])
+    }, [currentDoc])
 
     // — Jump to document from NotesManager —
     const handleJumpToDocument = useCallback((docId, projectId) => {
@@ -259,6 +303,7 @@ export default function App() {
 
     const selectedProjectData = projects.find((p) => p.id === selectedProject)
     const selectedProjectName = selectedProjectData?.name || null
+    // Use currentDoc in JSX (note: 'document' alias above still works for handlers)
 
     return (
         <div className="flex min-h-screen min-h-dvh overflow-x-hidden max-w-[100vw]">
@@ -282,6 +327,7 @@ export default function App() {
                         const proj = projects.find(p => p.documents.some(d => d.id === doc.id))
                         handleSelectDocument(doc, proj?.id, proj?.name)
                     }}
+
                     onDeleteDocument={handleDeleteDocument}
                     onUploadClick={handleUploadClick}
                     currentFile={document?.fileName}
@@ -300,14 +346,14 @@ export default function App() {
                 {/* Desktop toolbar */}
                 <div className="hidden md:block">
                     <Toolbar
-                        fileName={document?.fileName}
+                        fileName={currentDoc?.fileName}
+                        projectName={selectedProjectName}
                         onPrint={handlePrint}
-                        onSaveHtml={() => handleExportHtml(document)}
-                        onMenuToggle={() => { }}
+                        onSaveHtml={() => handleExportHtml(currentDoc)}
                         annotationActive={annotationActive}
                         onAnnotationToggle={() => setAnnotationActive((v) => !v)}
                         currentView={currentView}
-                        onChangeView={setCurrentView}
+                        onEnterFocus={handleEnterFocus}
                     />
                 </div>
 
@@ -316,7 +362,7 @@ export default function App() {
                     <span className="text-sm font-semibold truncate" style={{ fontFamily: 'var(--font-doc)' }}>
                         {currentView === VIEW.FILES ? '📂 Quản lý file'
                             : currentView === VIEW.NOTES ? '📝 Ghi chú'
-                                : document?.fileName || 'HoSo Reader'}
+                                : currentDoc?.fileName || 'HoSo Reader'}
                     </span>
                 </div>
 
@@ -382,7 +428,7 @@ export default function App() {
                             )}
 
                             <Paper
-                                document={document}
+                                document={currentDoc}
                                 annotationActive={annotationActive}
                                 onHighlight={handleHighlight}
                             />
@@ -404,12 +450,12 @@ export default function App() {
                 }}
                 onDeleteDocument={handleDeleteDocument}
                 onUploadClick={handleUploadClick}
-                currentFile={document?.fileName}
+                currentFile={currentDoc?.fileName}
                 annotationActive={annotationActive}
                 onAnnotationToggle={() => setAnnotationActive((v) => !v)}
                 onPrint={handlePrint}
-                onSaveHtml={() => handleExportHtml(document)}
-                hasDocument={!!document}
+                onSaveHtml={() => handleExportHtml(currentDoc)}
+                hasDocument={!!currentDoc}
                 recentDocs={recentDocs}
                 onOpenRecent={handleOpenRecent}
                 currentView={currentView}
