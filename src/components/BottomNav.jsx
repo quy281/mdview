@@ -38,6 +38,12 @@ export default function BottomNav({
             onChangeView?.('reader')
             return
         }
+        if (tab === 'focus') {
+            setShowPanel(false)
+            setActiveTab('focus')
+            onChangeView?.('focus')
+            return
+        }
         if (tab === 'files') {
             setShowPanel(false)
             setActiveTab('files')
@@ -222,7 +228,7 @@ export default function BottomNav({
                      ${currentView === 'reader' && !showPanel ? 'text-ink font-bold' : 'text-gray-500'}`}
                 >
                     <span className="text-lg">📄</span>
-                    <span>Đọc</span>
+                    <span>Tài liệu</span>
                 </button>
 
                 <button
@@ -234,13 +240,25 @@ export default function BottomNav({
                     <span>Dự án</span>
                 </button>
 
-                <button
-                    onClick={() => { onUploadClick(); setShowPanel(false); setActiveTab('doc'); }}
-                    className="flex-1 flex flex-col items-center justify-center gap-0.5 text-xs cursor-pointer text-gray-500"
-                >
-                    <span className="text-lg">⬆️</span>
-                    <span>Tải lên</span>
-                </button>
+                {/* Center: Upload or Focus (context-aware) */}
+                {hasDocument ? (
+                    <button
+                        onClick={() => handleTabClick('focus')}
+                        className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs cursor-pointer
+                         ${currentView === 'focus' ? 'text-ink font-bold' : 'text-gray-500'}`}
+                    >
+                        <span className="text-xl">📖</span>
+                        <span>Đọc</span>
+                    </button>
+                ) : (
+                    <button
+                        onClick={() => { onUploadClick(); setShowPanel(false); setActiveTab('doc'); }}
+                        className="flex-1 flex flex-col items-center justify-center gap-0.5 text-xs cursor-pointer text-gray-500"
+                    >
+                        <span className="text-lg">⬆️</span>
+                        <span>Tải lên</span>
+                    </button>
+                )}
 
                 <button
                     onClick={() => handleTabClick('files')}
@@ -258,15 +276,6 @@ export default function BottomNav({
                 >
                     <span className="text-lg">📝</span>
                     <span>Ghi chú</span>
-                </button>
-
-                <button
-                    onClick={() => handleTabClick('tools')}
-                    className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs cursor-pointer
-                     ${activeTab === 'tools' && showPanel ? 'text-ink font-bold' : 'text-gray-500'}`}
-                >
-                    <span className="text-lg">⚙️</span>
-                    <span>Công cụ</span>
                 </button>
             </nav>
         </div>

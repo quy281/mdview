@@ -6,6 +6,7 @@ import FileDropper from './components/FileDropper'
 import FileManager from './components/FileManager'
 import NotesManager from './components/NotesManager'
 import BottomNav from './components/BottomNav'
+import FocusReader from './components/FocusReader'
 import {
     getProjects,
     createProject,
@@ -29,7 +30,7 @@ function addRecentDoc(doc) {
 }
 
 // View modes
-const VIEW = { READER: 'reader', FILES: 'files', NOTES: 'notes' }
+const VIEW = { READER: 'reader', FILES: 'files', NOTES: 'notes', FOCUS: 'focus' }
 
 export default function App() {
     const [projects, setProjects] = useState([])
@@ -132,7 +133,12 @@ export default function App() {
         setDocument({ type: doc.type, content: doc.content, fileName: doc.fileName })
         setShowDropper(false)
         setAnnotationActive(false)
-        setCurrentView(VIEW.READER)
+        // Auto-enter focus mode on mobile
+        if (window.innerWidth < 768) {
+            setCurrentView(VIEW.FOCUS)
+        } else {
+            setCurrentView(VIEW.READER)
+        }
 
         addRecentDoc({ id: doc.id, fileName: doc.fileName, type: doc.type, projectId, projectName })
         setRecentDocs(getRecentDocs())
@@ -146,7 +152,12 @@ export default function App() {
                 setDocument({ type: doc.type, content: doc.content, fileName: doc.fileName })
                 setShowDropper(false)
                 setAnnotationActive(false)
-                setCurrentView(VIEW.READER)
+                // Auto-enter focus mode on mobile
+                if (window.innerWidth < 768) {
+                    setCurrentView(VIEW.FOCUS)
+                } else {
+                    setCurrentView(VIEW.READER)
+                }
                 return
             }
         }
@@ -166,18 +177,18 @@ export default function App() {
 
     const handlePrint = useCallback(() => { window.print() }, [])
 
-    // — Highlight handler —
+    // — Highlight / Note handler (shared) —
     const handleHighlight = useCallback((data) => {
         if (!document) return
         const proj = projects.find(p => p.id === selectedProject)
         saveAnnotation({
             document_id: selectedProject ? proj?.documents?.find(d => d.fileName === document.fileName)?.id : null,
             project_id: selectedProject,
-            type: 'highlight',
+            type: data.type || 'highlight',
             text: data.text,
-            color: data.color,
+            color: data.color || '#fde047',
             note: data.note || '',
-            fileName: document.fileName,
+            fileName: data.fileName || document.fileName,
         })
     }, [document, projects, selectedProject])
 
@@ -251,6 +262,14 @@ export default function App() {
 
     return (
         <div className="flex min-h-screen min-h-dvh overflow-x-hidden max-w-[100vw]">
+            {/* FOCUS READING MODE – full screen overlay */}
+            {currentView === VIEW.FOCUS && (
+                <FocusReader
+                    document={document}
+                    onExit={() => setCurrentView(VIEW.READER)}
+                    onSaveNote={handleHighlight}
+                />
+            )}
             {/* Desktop sidebar */}
             <div className="hidden md:block">
                 <Sidebar

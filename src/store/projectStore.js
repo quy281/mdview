@@ -2,6 +2,7 @@
  * Project Store – PocketBase + localStorage hybrid data layer.
  * Collections: hoso_projects, hoso_documents, hoso_annotations on db.mkg.vn
  * Falls back to localStorage if PocketBase is unavailable.
+ * NOTE: Does NOT permanently lock to fallback – retries PB on every call.
  */
 import pb from './pb'
 
@@ -13,8 +14,6 @@ const ANNOTATIONS_COLLECTION = 'hoso_annotations'
 const LS_PROJECTS = 'hoso_ls_projects'
 const LS_DOCS = 'hoso_ls_documents'
 const LS_ANNOTATIONS = 'hoso_ls_annotations'
-
-let useFallback = false
 
 // ── Helpers ───────────────────────────────────────
 
@@ -35,42 +34,51 @@ function debouncedCallback(callback, delay = 100) {
     refreshTimer = setTimeout(callback, delay)
 }
 
+// Check if PocketBase is reachable (lightweight)
+async function isPBAvailable() {
+    try {
+        await pb.health.check()
+        return true
+    } catch {
+        return false
+    }
+}
+
 // ── Projects ──────────────────────────────────────
 
 export async function getProjects() {
-    // Try PocketBase first
-    if (!useFallback) {
-        try {
-            const projects = await pb.collection(PROJECTS_COLLECTION).getFullList()
-            const docs = await pb.collection(DOCS_COLLECTION).getFullList()
+    // Always try PocketBase first (no permanent lock)
+    try {
+        const projects = await pb.collection(PROJECTS_COLLECTION).getFullList()
+        const docs = await pb.collection(DOCS_COLLECTION).getFullList()
 
-            projects.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
-            docs.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
+        projects.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
+        docs.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
 
-            const result = projects.map((p) => ({
-                id: p.id,
-                name: p.name,
-                createdAt: p.created,
-                documents: docs
-                    .filter((d) => d.project_id === p.id)
-                    .map((d) => ({
-                        id: d.id,
-                        fileName: d.fileName,
-                        content: d.content,
-                        type: d.type,
-                        createdAt: d.created,
-                    })),
-            }))
+        const result = projects.map((p) => ({
+            id: p.id,
+            name: p.name,
+            createdAt: p.created,
+            documents: docs
+                .filter((d) => d.project_id === p.id)
+                .map((d) => ({
+                    id: d.id,
+                    fileName: d.fileName,
+                    content: d.content,
+                    type: d.type,
+                    createdAt: d.created,
+                })),
+        }))
 
-            // Sync to localStorage as backup
-            lsSet(LS_PROJECTS, result.map(p => ({ ...p, documents: undefined })))
-            lsSet(LS_DOCS, result.flatMap(p => p.documents.map(d => ({ ...d, project_id: p.id }))))
+        // Sync to localStorage as backup — including document content
+        lsSet(LS_PROJECTS, result.map(p => ({ id: p.id, name: p.name, createdAt: p.createdAt })))
+        lsSet(LS_DOCS, result.flatMap(p =>
+            p.documents.map(d => ({ ...d, project_id: p.id }))
+        ))
 
-            return result
-        } catch (err) {
-            console.warn('PocketBase unavailable, using localStorage fallback:', err.message)
-            useFallback = true
-        }
+        return result
+    } catch (err) {
+        console.warn('PocketBase unavailable, using localStorage fallback:', err.message)
     }
 
     // localStorage fallback
@@ -84,14 +92,11 @@ export async function getProjects() {
 
 export async function createProject(name) {
     const trimmed = name.trim()
-    if (!useFallback) {
-        try {
-            const record = await pb.collection(PROJECTS_COLLECTION).create({ name: trimmed })
-            return { id: record.id, name: record.name, createdAt: record.created, documents: [] }
-        } catch (err) {
-            console.warn('PB create project failed, using localStorage:', err.message)
-            useFallback = true
-        }
+    try {
+        const record = await pb.collection(PROJECTS_COLLECTION).create({ name: trimmed })
+        return { id: record.id, name: record.name, createdAt: record.created, documents: [] }
+    } catch (err) {
+        console.warn('PB create project failed, using localStorage:', err.message)
     }
 
     // localStorage
@@ -103,19 +108,17 @@ export async function createProject(name) {
 }
 
 export async function deleteProject(id) {
-    if (!useFallback) {
-        try {
-            const docs = await pb.collection(DOCS_COLLECTION).getFullList({
-                filter: `project_id = "${id}"`,
-            })
-            for (const doc of docs) {
-                await pb.collection(DOCS_COLLECTION).delete(doc.id)
-            }
-            await pb.collection(PROJECTS_COLLECTION).delete(id)
-            return
-        } catch (err) {
-            console.warn('PB delete project failed:', err.message)
+    try {
+        const docs = await pb.collection(DOCS_COLLECTION).getFullList({
+            filter: `project_id = "${id}"`,
+        })
+        for (const doc of docs) {
+            await pb.collection(DOCS_COLLECTION).delete(doc.id)
         }
+        await pb.collection(PROJECTS_COLLECTION).delete(id)
+        return
+    } catch (err) {
+        console.warn('PB delete project failed, deleting from localStorage:', err.message)
     }
 
     // localStorage
@@ -126,25 +129,28 @@ export async function deleteProject(id) {
 // ── Documents ─────────────────────────────────────
 
 export async function saveDocument(projectId, fileName, content, type) {
-    if (!useFallback) {
-        try {
-            const record = await pb.collection(DOCS_COLLECTION).create({
-                project_id: projectId,
-                fileName,
-                content,
-                type,
-            })
-            return {
-                id: record.id,
-                fileName: record.fileName,
-                content: record.content,
-                type: record.type,
-                createdAt: record.created,
-            }
-        } catch (err) {
-            console.warn('PB save document failed, using localStorage:', err.message)
-            useFallback = true
+    try {
+        const record = await pb.collection(DOCS_COLLECTION).create({
+            project_id: projectId,
+            fileName,
+            content,
+            type,
+        })
+        // Also cache to localStorage
+        const doc = {
+            id: record.id,
+            project_id: projectId,
+            fileName: record.fileName,
+            content: record.content,
+            type: record.type,
+            createdAt: record.created,
         }
+        const docs = lsGet(LS_DOCS)
+        docs.unshift(doc)
+        lsSet(LS_DOCS, docs)
+        return { id: record.id, fileName: record.fileName, content: record.content, type: record.type, createdAt: record.created }
+    } catch (err) {
+        console.warn('PB save document failed, using localStorage:', err.message)
     }
 
     // localStorage
@@ -156,81 +162,71 @@ export async function saveDocument(projectId, fileName, content, type) {
 }
 
 export async function deleteDocument(projectId, docId) {
-    if (!useFallback) {
-        try {
-            await pb.collection(DOCS_COLLECTION).delete(docId)
-            return
-        } catch (err) {
-            console.warn('PB delete doc failed:', err.message)
-        }
+    try {
+        await pb.collection(DOCS_COLLECTION).delete(docId)
+    } catch (err) {
+        console.warn('PB delete doc failed:', err.message)
     }
-
-    // localStorage
+    // Always clean localStorage too
     lsSet(LS_DOCS, lsGet(LS_DOCS).filter(d => d.id !== docId))
 }
 
 // ── Annotations ───────────────────────────────────
 
 export async function getAnnotations(docId) {
-    if (!useFallback) {
-        try {
-            const records = await pb.collection(ANNOTATIONS_COLLECTION).getFullList({
-                filter: `document_id = "${docId}"`,
-                sort: '-created',
-            })
-            return records.map(r => ({
-                id: r.id,
-                document_id: r.document_id,
-                project_id: r.project_id,
-                type: r.type,
-                text: r.text,
-                color: r.color,
-                note: r.note,
-                range: r.range,
-                data: r.data,
-                createdAt: r.created,
-            }))
-        } catch {
-            // fall through to localStorage
-        }
+    try {
+        const records = await pb.collection(ANNOTATIONS_COLLECTION).getFullList({
+            filter: `document_id = "${docId}"`,
+            sort: '-created',
+        })
+        return records.map(r => ({
+            id: r.id,
+            document_id: r.document_id,
+            project_id: r.project_id,
+            type: r.type,
+            text: r.text,
+            color: r.color,
+            note: r.note,
+            range: r.range,
+            data: r.data,
+            createdAt: r.created,
+        }))
+    } catch {
+        // fall through to localStorage
     }
 
     return lsGet(LS_ANNOTATIONS).filter(a => a.document_id === docId)
 }
 
 export async function getAllAnnotations() {
-    if (!useFallback) {
-        try {
-            const records = await pb.collection(ANNOTATIONS_COLLECTION).getFullList({ sort: '-created' })
-            return records.map(r => ({
-                id: r.id,
-                document_id: r.document_id,
-                project_id: r.project_id,
-                type: r.type,
-                text: r.text,
-                color: r.color,
-                note: r.note,
-                range: r.range,
-                data: r.data,
-                fileName: r.fileName,
-                createdAt: r.created,
-            }))
-        } catch {
-            // fall through
-        }
+    try {
+        const records = await pb.collection(ANNOTATIONS_COLLECTION).getFullList({ sort: '-created' })
+        return records.map(r => ({
+            id: r.id,
+            document_id: r.document_id,
+            project_id: r.project_id,
+            type: r.type,
+            text: r.text,
+            color: r.color,
+            note: r.note,
+            range: r.range,
+            data: r.data,
+            fileName: r.fileName,
+            createdAt: r.created,
+        }))
+    } catch {
+        // fall through
     }
 
     return lsGet(LS_ANNOTATIONS)
 }
 
 export async function saveAnnotation(data) {
-    if (!useFallback) {
-        try {
-            const record = await pb.collection(ANNOTATIONS_COLLECTION).create(data)
-            return { ...data, id: record.id, createdAt: record.created }
-        } catch (err) {
-            console.warn('PB save annotation failed:', err.message)
-        }
+    try {
+        const record = await pb.collection(ANNOTATIONS_COLLECTION).create(data)
+        return { ...data, id: record.id, createdAt: record.created }
+    } catch (err) {
+        console.warn('PB save annotation failed:', err.message)
     }
 
     const annotation = { ...data, id: generateId(), createdAt: new Date().toISOString() }
@@ -241,13 +237,11 @@ export async function saveAnnotation(data) {
 }
 
 export async function updateAnnotation(id, data) {
-    if (!useFallback) {
-        try {
-            await pb.collection(ANNOTATIONS_COLLECTION).update(id, data)
-            return
-        } catch (err) {
-            console.warn('PB update annotation failed:', err.message)
-        }
+    try {
+        await pb.collection(ANNOTATIONS_COLLECTION).update(id, data)
+        return
+    } catch (err) {
+        console.warn('PB update annotation failed:', err.message)
     }
 
     const all = lsGet(LS_ANNOTATIONS)
@@ -259,23 +253,17 @@ export async function updateAnnotation(id, data) {
 }
 
 export async function deleteAnnotation(id) {
-    if (!useFallback) {
-        try {
-            await pb.collection(ANNOTATIONS_COLLECTION).delete(id)
-            return
-        } catch (err) {
-            console.warn('PB delete annotation failed:', err.message)
-        }
+    try {
+        await pb.collection(ANNOTATIONS_COLLECTION).delete(id)
+    } catch (err) {
+        console.warn('PB delete annotation failed:', err.message)
     }
-
     lsSet(LS_ANNOTATIONS, lsGet(LS_ANNOTATIONS).filter(a => a.id !== id))
 }
 
 // ── Real-time Subscriptions ───────────────────────
 
 export function subscribeToChanges(onUpdate) {
-    if (useFallback) return () => { }
-
     let cancelled = false
     const handler = () => {
         if (!cancelled) debouncedCallback(onUpdate)
