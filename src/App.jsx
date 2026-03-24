@@ -55,8 +55,8 @@ export default function App() {
 
     const isFetchingRef = useRef(false)
 
-    const refreshProjects = useCallback(async () => {
-        if (isFetchingRef.current) return
+    const refreshProjects = useCallback(async (force = false) => {
+        if (!force && isFetchingRef.current) return
         isFetchingRef.current = true
         try {
             const data = await getProjects()
@@ -70,7 +70,18 @@ export default function App() {
     }, [])
 
     useEffect(() => {
-        refreshProjects()
+        refreshProjects(true)
+    }, [refreshProjects])
+
+    // Re-fetch when user returns to the tab (handles cross-device stale data)
+    useEffect(() => {
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') {
+                refreshProjects(true)
+            }
+        }
+        document.addEventListener('visibilitychange', onVisible)
+        return () => document.removeEventListener('visibilitychange', onVisible)
     }, [refreshProjects])
 
     // Keyboard shortcut: F = enter focus mode
@@ -93,7 +104,7 @@ export default function App() {
     // Real-time subscriptions
     useEffect(() => {
         const cleanup = subscribeToChanges(() => {
-            refreshProjects()
+            refreshProjects(true)
         })
         return cleanup
     }, [refreshProjects])
@@ -124,37 +135,45 @@ export default function App() {
         showToast('Đã xóa dự án', 'error')
     }, [selectedProject, refreshProjects, showToast])
 
-    // — Multi-file upload (optimistic) —
+    // — Multi-file upload (optimistic + safe merge) —
     const handleFilesProcessed = useCallback(async (results) => {
         if (!selectedProject) {
             showToast('⚠️ Vui lòng chọn 1 dự án trước khi tải file!', 'error')
             return
         }
 
-        const newDocs = results.map((r, i) => ({
-            id: 'temp_' + Date.now() + '_' + i,
-            fileName: r.fileName,
-            content: r.content,
-            type: r.type,
-            createdAt: new Date().toISOString(),
-        }))
-        setProjects(prev => prev.map(p =>
-            p.id === selectedProject
-                ? { ...p, documents: [...newDocs, ...p.documents] }
-                : p
-        ))
-
+        // Show last file immediately for reading
         const last = results[results.length - 1]
         setCurrentDoc({ type: last.type, content: last.content, fileName: last.fileName })
         setShowDropper(false)
         setAnnotationMode('off')
         setCurrentView(VIEW.READER)
 
+        // Save each file sequentially; collect confirmed docs from PB
+        const savedDocs = []
         for (const r of results) {
-            await saveDocument(selectedProject, r.fileName, r.content, r.type)
+            const saved = await saveDocument(selectedProject, r.fileName, r.content, r.type)
+            if (saved) {
+                savedDocs.push(saved)
+            }
         }
-        await refreshProjects()
+
+        // Merge confirmed docs into state immediately (no re-fetch from PB yet)
+        // This prevents the race where PB hasn't propagated yet and would overwrite IDB
+        if (savedDocs.length > 0) {
+            setProjects(prev => prev.map(p => {
+                if (p.id !== selectedProject) return p
+                // Remove temp placeholders if any, then prepend real saved docs
+                const existingIds = new Set(p.documents.map(d => d.id))
+                const freshDocs = savedDocs.filter(d => !existingIds.has(d.id))
+                return { ...p, documents: [...freshDocs, ...p.documents] }
+            }))
+        }
+
         showToast(`✅ Đã tải ${results.length} file thành công`)
+
+        // After a short delay, do a full sync from PB to ensure consistency
+        setTimeout(() => { refreshProjects(true) }, 2000)
     }, [selectedProject, refreshProjects, showToast])
 
     // — Document selection —

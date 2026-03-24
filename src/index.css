@@ -1,30 +1,29 @@
 @import "tailwindcss";
 
 /* ============================================================
-   HoSo Reader – Modern Dark Theme Design System
-   Glassmorphism, gradients, micro-animations.
-   Premium dark UI with high contrast.
+   HoSo Reader – Light Premium Theme
+   Clean, modern, elegant. Indigo accent on cool-white base.
    ============================================================ */
 
 @theme {
-  /* — Colors: Dark premium palette — */
-  --color-ink: #e4e4e7;
+  /* — Colors: Light premium palette — */
+  --color-ink: #1e1e2e;
   --color-paper: #ffffff;
-  --color-bg: #0c0c10;
-  --color-surface: #16161e;
-  --color-surface-2: #1e1e2a;
-  --color-surface-3: #282836;
-  --color-border: #2e2e3e;
-  --color-border-light: #3a3a4e;
+  --color-bg: #f0f2f8;
+  --color-surface: #ffffff;
+  --color-surface-2: #f5f7ff;
+  --color-surface-3: #eceffe;
+  --color-border: #dde0ef;
+  --color-border-light: #c8ccdf;
   --color-accent: #6366f1;
-  --color-accent-light: #818cf8;
-  --color-accent-dim: rgba(99, 102, 241, 0.15);
-  --color-text: #e4e4e7;
-  --color-text-secondary: #a1a1aa;
-  --color-text-muted: #71717a;
-  --color-danger: #ef4444;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
+  --color-accent-light: #4f52d6;
+  --color-accent-dim: rgba(99, 102, 241, 0.10);
+  --color-text: #1e1e2e;
+  --color-text-secondary: #4a4a6a;
+  --color-text-muted: #8b8bab;
+  --color-danger: #e53e3e;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
 
   /* Annotation colors */
   --color-highlight: #fde047;
@@ -47,6 +46,7 @@
   --a4-height: 297mm;
   --a4-margin: 25mm;
 }
+
 
 /* ============================================================
    Base Styles
@@ -313,13 +313,13 @@ body {
 
   .sidebar.open {
     transform: translateX(0);
-    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.12);
   }
 
   .sidebar-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.25);
     backdrop-filter: blur(4px);
     z-index: 40;
     animation: fadeIn 0.2s ease;
@@ -551,7 +551,7 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-surface);
+  background: var(--color-bg);
 }
 
 ::-webkit-scrollbar-thumb {

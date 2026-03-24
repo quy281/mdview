@@ -143,7 +143,7 @@ export default function BottomNav({
                         style={{
                             position: 'fixed',
                             inset: 0,
-                            background: 'rgba(0,0,0,0.5)',
+                            background: 'rgba(0,0,0,0.2)',
                             backdropFilter: 'blur(4px)',
                             zIndex: 40,
                         }}
@@ -341,17 +341,6 @@ export default function BottomNav({
                 height: '56px',
                 backdropFilter: 'blur(12px)',
             }}>
-                <button onClick={() => handleTabClick('doc')} style={s.navBtn(currentView === 'reader' && !showPanel)}>
-                    <span style={{ fontSize: '18px' }}>📄</span>
-                    <span>Tài liệu</span>
-                    {currentView === 'reader' && !showPanel && <div style={{ position: 'absolute', top: 0, left: '25%', right: '25%', height: '2px', background: 'var(--color-accent)', borderRadius: '0 0 2px 2px' }} />}
-                </button>
-
-                <button onClick={() => handleTabClick('projects')} style={s.navBtn(activeTab === 'projects' && showPanel)}>
-                    <span style={{ fontSize: '18px' }}>📁</span>
-                    <span>Dự án</span>
-                </button>
-
                 {hasDocument ? (
                     <button onClick={() => handleTabClick('focus')} style={s.navBtn(currentView === 'focus')}>
                         <span style={{ fontSize: '20px' }}>📖</span>
@@ -364,6 +353,18 @@ export default function BottomNav({
                         <span>Tải lên</span>
                     </button>
                 )}
+
+                <button onClick={() => handleTabClick('doc')} style={s.navBtn(currentView === 'reader' && !showPanel)}>
+                    <span style={{ fontSize: '18px' }}>📄</span>
+                    <span>Tài liệu</span>
+                    {currentView === 'reader' && !showPanel && <div style={{ position: 'absolute', top: 0, left: '25%', right: '25%', height: '2px', background: 'var(--color-accent)', borderRadius: '0 0 2px 2px' }} />}
+                </button>
+
+                <button onClick={() => handleTabClick('projects')} style={s.navBtn(activeTab === 'projects' && showPanel)}>
+                    <span style={{ fontSize: '18px' }}>📁</span>
+                    <span>Dự án</span>
+                    {activeTab === 'projects' && showPanel && <div style={{ position: 'absolute', top: 0, left: '25%', right: '25%', height: '2px', background: 'var(--color-accent)', borderRadius: '0 0 2px 2px' }} />}
+                </button>
 
                 <button onClick={() => handleTabClick('files')} style={s.navBtn(currentView === 'files')}>
                     <span style={{ fontSize: '18px' }}>📂</span>
