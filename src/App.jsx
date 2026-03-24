@@ -35,22 +35,27 @@ const VIEW = { READER: 'reader', FILES: 'files', NOTES: 'notes', FOCUS: 'focus' 
 export default function App() {
     const [projects, setProjects] = useState([])
     const [selectedProject, setSelectedProject] = useState(null)
-    const [currentDoc, setCurrentDoc] = useState(null) // FIX #1: renamed from 'document' to avoid shadowing window.document
+    const [currentDoc, setCurrentDoc] = useState(null)
     const [showDropper, setShowDropper] = useState(true)
-    const [annotationMode, setAnnotationMode] = useState('off') // 'off' | 'draw' | 'highlight'
+    const [annotationMode, setAnnotationMode] = useState('off')
     const [loading, setLoading] = useState(true)
     const [recentDocs, setRecentDocs] = useState(getRecentDocs())
     const [currentView, setCurrentView] = useState(VIEW.READER)
+    const [toast, setToast] = useState(null)
     const dropperRef = useRef(null)
 
-    // Alias for readability in handlers (avoid window.document confusion)
     const document = currentDoc
     const setDocument = setCurrentDoc
+
+    // Toast helper
+    const showToast = useCallback((message, type = 'success') => {
+        setToast({ message, type })
+        setTimeout(() => setToast(null), 3000)
+    }, [])
 
     const isFetchingRef = useRef(false)
 
     const refreshProjects = useCallback(async () => {
-        // FIX: prevent concurrent fetches
         if (isFetchingRef.current) return
         isFetchingRef.current = true
         try {
@@ -64,7 +69,6 @@ export default function App() {
         }
     }, [])
 
-    // Load projects on mount (no auth needed)
     useEffect(() => {
         refreshProjects()
     }, [refreshProjects])
@@ -95,11 +99,9 @@ export default function App() {
     }, [refreshProjects])
 
     // — Project CRUD (optimistic) —
-
     const handleCreateProject = useCallback(async (name) => {
         const tempId = 'temp_' + Date.now()
         const optimistic = { id: tempId, name: name.trim(), createdAt: new Date().toISOString(), documents: [] }
-
         setProjects(prev => [optimistic, ...prev])
         setSelectedProject(tempId)
 
@@ -108,8 +110,9 @@ export default function App() {
             setProjects(prev => prev.map(p => p.id === tempId ? { ...optimistic, id: project.id } : p))
             setSelectedProject(project.id)
         }
+        showToast(`Đã tạo dự án "${name.trim()}"`)
         refreshProjects()
-    }, [refreshProjects])
+    }, [refreshProjects, showToast])
 
     const handleDeleteProject = useCallback(async (id) => {
         setProjects(prev => prev.filter(p => p.id !== id))
@@ -117,15 +120,14 @@ export default function App() {
             setSelectedProject(null)
             setDocument(null)
         }
-
         deleteProjectFromStore(id).then(() => refreshProjects())
-    }, [selectedProject, refreshProjects])
+        showToast('Đã xóa dự án', 'error')
+    }, [selectedProject, refreshProjects, showToast])
 
     // — Multi-file upload (optimistic) —
-
     const handleFilesProcessed = useCallback(async (results) => {
         if (!selectedProject) {
-            alert('Vui lòng chọn 1 dự án trước khi tải file!')
+            showToast('⚠️ Vui lòng chọn 1 dự án trước khi tải file!', 'error')
             return
         }
 
@@ -148,26 +150,23 @@ export default function App() {
         setAnnotationMode('off')
         setCurrentView(VIEW.READER)
 
-        // FIX #2: save files sequentially to prevent PocketBase SDK auto-canceling parallel requests
         for (const r of results) {
             await saveDocument(selectedProject, r.fileName, r.content, r.type)
         }
         await refreshProjects()
-    }, [selectedProject, refreshProjects])
+        showToast(`✅ Đã tải ${results.length} file thành công`)
+    }, [selectedProject, refreshProjects, showToast])
 
     // — Document selection —
-
     const handleSelectDocument = useCallback((doc, projectId, projectName) => {
         setCurrentDoc({ type: doc.type, content: doc.content, fileName: doc.fileName })
         setShowDropper(false)
         setAnnotationMode('off')
-        // Auto-enter focus mode on mobile
         if (window.innerWidth < 768) {
             setCurrentView(VIEW.FOCUS)
         } else {
             setCurrentView(VIEW.READER)
         }
-
         addRecentDoc({ id: doc.id, fileName: doc.fileName, type: doc.type, projectId, projectName })
         setRecentDocs(getRecentDocs())
     }, [])
@@ -180,7 +179,6 @@ export default function App() {
                 setCurrentDoc({ type: doc.type, content: doc.content, fileName: doc.fileName })
                 setShowDropper(false)
                 setAnnotationMode('off')
-                // Auto-enter focus mode on mobile
                 if (window.innerWidth < 768) {
                     setCurrentView(VIEW.FOCUS)
                 } else {
@@ -189,11 +187,10 @@ export default function App() {
                 return
             }
         }
-        alert('Tài liệu không còn tồn tại.')
-    }, [projects])
+        showToast('Tài liệu không còn tồn tại.', 'error')
+    }, [projects, showToast])
 
     const handleDeleteDocument = useCallback(async (projectId, docId) => {
-        // FIX: if the deleted doc is currently open, clear the reader
         const currentProj = projects.find(p => p.id === projectId)
         const deletedDoc = currentProj?.documents?.find(d => d.id === docId)
         if (deletedDoc && deletedDoc.fileName === currentDoc?.fileName) {
@@ -202,7 +199,8 @@ export default function App() {
         }
         await deleteDocFromStore(projectId, docId)
         await refreshProjects()
-    }, [refreshProjects, projects, currentDoc])
+        showToast('Đã xóa tài liệu', 'error')
+    }, [refreshProjects, projects, currentDoc, showToast])
 
     const handleUploadClick = useCallback(() => {
         setCurrentView(VIEW.READER)
@@ -216,14 +214,13 @@ export default function App() {
 
     const handlePrint = useCallback(() => { window.print() }, [])
 
-    // — Highlight / Note handler (shared) —
+    // — Highlight / Note handler —
     const handleHighlight = useCallback((data) => {
         if (!currentDoc) return
         const proj = projects.find(p => p.id === selectedProject)
-        // FIX #3: guard against null/undefined doc_id (doc may not be saved to PB yet)
         const docId = proj?.documents?.find(d => d.fileName === currentDoc.fileName)?.id ?? null
         if (!docId) {
-            console.warn('handleHighlight: document_id not found, annotation will be saved without PB link')
+            console.warn('handleHighlight: document_id not found')
         }
         saveAnnotation({
             document_id: docId,
@@ -242,10 +239,8 @@ export default function App() {
         const content = doc?.content || ''
         const fileName = doc?.fileName || currentDoc?.fileName || 'document'
 
-        // For MD, render to simple HTML; for HTML/docx, use content directly
         let bodyHtml = content
         if (doc?.type === 'md' || (!doc && currentDoc?.type === 'md')) {
-            // Use rendered DOM content for accurate MD export
             const paperEl = window.document.getElementById('paper-content')
             if (paperEl) bodyHtml = paperEl.innerHTML
         }
@@ -274,7 +269,6 @@ export default function App() {
     th { font-weight: 700; background: #f5f5f5; }
     a { color: #000; text-decoration: underline; }
     img { max-width: 100%; }
-    mark { padding: 1px 2px; border-radius: 2px; }
     @media print { @page { size: A4; margin: 20mm; } body { padding: 0; } }
   </style>
 </head>
@@ -297,7 +291,6 @@ export default function App() {
             if (doc) {
                 setSelectedProject(proj.id)
                 handleSelectDocument(doc, proj.id, proj.name)
-                // Scroll to saved position after render
                 if (scrollPosition) {
                     setTimeout(() => {
                         const container = window.document.querySelector('.flex-1.overflow-auto')
@@ -311,10 +304,9 @@ export default function App() {
 
     const selectedProjectData = projects.find((p) => p.id === selectedProject)
     const selectedProjectName = selectedProjectData?.name || null
-    // Use currentDoc in JSX (note: 'document' alias above still works for handlers)
 
     return (
-        <div className="flex min-h-screen min-h-dvh overflow-x-hidden max-w-[100vw]">
+        <div className="flex min-h-screen min-h-dvh overflow-x-hidden max-w-[100vw]" style={{ background: 'var(--color-bg)' }}>
             {/* FOCUS READING MODE – full screen overlay */}
             {currentView === VIEW.FOCUS && (
                 <FocusReader
@@ -323,6 +315,7 @@ export default function App() {
                     onSaveNote={handleHighlight}
                 />
             )}
+
             {/* Desktop sidebar */}
             <div className="hidden md:block">
                 <Sidebar
@@ -335,7 +328,6 @@ export default function App() {
                         const proj = projects.find(p => p.documents.some(d => d.id === doc.id))
                         handleSelectDocument(doc, proj?.id, proj?.name)
                     }}
-
                     onDeleteDocument={handleDeleteDocument}
                     onUploadClick={handleUploadClick}
                     currentFile={document?.fileName}
@@ -351,7 +343,7 @@ export default function App() {
             </div>
 
             {/* Main content */}
-            <main className="flex-1 flex flex-col min-h-screen min-h-dvh bg-gray-100">
+            <main className="flex-1 flex flex-col min-h-screen min-h-dvh" style={{ background: 'var(--color-bg)' }}>
                 {/* Desktop toolbar */}
                 <div className="hidden md:block">
                     <Toolbar
@@ -367,8 +359,14 @@ export default function App() {
                 </div>
 
                 {/* Mobile top bar */}
-                <div className="md:hidden flex items-center px-4 py-2 border-b border-gray-300 bg-white no-print">
-                    <span className="text-sm font-semibold truncate" style={{ fontFamily: 'var(--font-doc)' }}>
+                <div className="md:hidden flex items-center px-4 py-3 no-print" style={{
+                    background: 'var(--color-surface)',
+                    borderBottom: '1px solid var(--color-border)',
+                }}>
+                    <span className="text-sm font-semibold truncate" style={{
+                        fontFamily: 'var(--font-sans)',
+                        color: 'var(--color-text)',
+                    }}>
                         {currentView === VIEW.FILES ? '📂 Quản lý file'
                             : currentView === VIEW.NOTES ? '📝 Ghi chú'
                                 : currentDoc?.fileName || 'HoSo Reader'}
@@ -407,10 +405,10 @@ export default function App() {
                                 </div>
                             )}
 
-                            {/* Recent Documents (when no document is open) */}
+                            {/* Recent Documents */}
                             {!document && recentDocs.length > 0 && (
                                 <div className="w-full max-w-[210mm] mb-6">
-                                    <h3 className="text-sm font-bold uppercase tracking-wider mb-3 text-gray-600">
+                                    <h3 className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--color-text-muted)' }}>
                                         📋 Tài liệu gần đây
                                     </h3>
                                     <div className="grid gap-2">
@@ -418,16 +416,31 @@ export default function App() {
                                             <button
                                                 key={r.id}
                                                 onClick={() => handleOpenRecent(r)}
-                                                className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 hover:border-ink text-left cursor-pointer transition-colors"
+                                                className="flex items-center gap-3 px-4 py-3 text-left cursor-pointer"
+                                                style={{
+                                                    background: 'var(--color-surface)',
+                                                    border: '1px solid var(--color-border)',
+                                                    borderRadius: '10px',
+                                                    color: 'var(--color-text)',
+                                                    transition: 'all 0.2s ease',
+                                                }}
+                                                onMouseEnter={e => {
+                                                    e.currentTarget.style.borderColor = 'var(--color-accent)'
+                                                    e.currentTarget.style.background = 'var(--color-surface-2)'
+                                                }}
+                                                onMouseLeave={e => {
+                                                    e.currentTarget.style.borderColor = 'var(--color-border)'
+                                                    e.currentTarget.style.background = 'var(--color-surface)'
+                                                }}
                                             >
                                                 <span className="text-lg">{r.type === 'md' ? '📝' : r.type === 'html' ? '🌐' : '📄'}</span>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-medium truncate">{r.fileName}</p>
                                                     {r.projectName && (
-                                                        <p className="text-xs text-gray-500 truncate">📂 {r.projectName}</p>
+                                                        <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>📂 {r.projectName}</p>
                                                     )}
                                                 </div>
-                                                <span className="text-xs text-gray-400">
+                                                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                                                     {new Date(r.viewedAt).toLocaleDateString('vi-VN')}
                                                 </span>
                                             </button>
@@ -471,6 +484,13 @@ export default function App() {
                 onChangeView={setCurrentView}
                 onSync={refreshProjects}
             />
+
+            {/* Toast notification */}
+            {toast && (
+                <div className={`toast ${toast.type}`}>
+                    {toast.message}
+                </div>
+            )}
         </div>
     )
 }

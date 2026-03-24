@@ -21,10 +21,14 @@ function generateId() {
     return 'ls_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
 }
 
+let _lastPBSuccess = 0
+
 function withTimeout(promise, ms) {
+    // If PB was reachable recently, give it more time to avoid false timeouts
+    const timeout = (Date.now() - _lastPBSuccess < 15000) ? ms * 2 : ms
     return Promise.race([
         promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('PocketBase timeout')), ms))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('PocketBase timeout')), timeout))
     ])
 }
 
@@ -41,11 +45,13 @@ function makeDebounced(delay = 100) {
 
 export async function getProjects() {
     try {
-        // Fetch projects + docs in parallel with timeout 4s to prevent UI hanging
+        // Fetch projects + docs in parallel with timeout 8s to prevent UI hanging
         const [projects, docs] = await withTimeout(Promise.all([
             pb.collection(PROJECTS_COLLECTION).getFullList(),
             pb.collection(DOCS_COLLECTION).getFullList(),
-        ]), 4000)
+        ]), 8000)
+
+        _lastPBSuccess = Date.now()
 
         projects.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
         docs.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
@@ -133,6 +139,7 @@ export async function saveDocument(projectId, fileName, content, type) {
             content,
             type,
         })
+        _lastPBSuccess = Date.now()
         const doc = {
             id: record.id,
             project_id: projectId,
@@ -141,10 +148,18 @@ export async function saveDocument(projectId, fileName, content, type) {
             type: record.type,
             createdAt: record.created,
         }
-        // Cache to IDB
+        // Write-through: update IDB docs cache immediately
         const docs = (await idbGet(LS_DOCS)) || []
         docs.unshift(doc)
         await idbSet(LS_DOCS, docs)
+
+        // Also ensure the project exists in IDB projects cache
+        const cachedProjects = (await idbGet(LS_PROJECTS)) || []
+        if (!cachedProjects.find(p => p.id === projectId)) {
+            cachedProjects.unshift({ id: projectId, name: projectId, createdAt: new Date().toISOString() })
+            await idbSet(LS_PROJECTS, cachedProjects)
+        }
+
         return { id: record.id, fileName: record.fileName, content: record.content, type: record.type, createdAt: record.created }
     } catch (err) {
         console.warn('PB save document failed, using idb:', err.message)

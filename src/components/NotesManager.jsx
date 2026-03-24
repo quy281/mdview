@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getAllAnnotations, deleteAnnotation, updateAnnotation } from '../store/projectStore'
 
 /**
- * NotesManager – Full CRUD panel for all annotations (highlights, drawings, text notes).
- * List view with search, filter, edit, and delete capabilities.
+ * NotesManager – Dark themed annotation management panel.
  */
 export default function NotesManager({ projects, onJumpToDocument }) {
     const [annotations, setAnnotations] = useState([])
@@ -26,7 +25,6 @@ export default function NotesManager({ projects, onJumpToDocument }) {
         setLoading(true)
         try {
             const data = await getAllAnnotations()
-            // Enrich with document/project info
             const enriched = data.map(a => {
                 let docName = a.fileName || ''
                 let projName = ''
@@ -112,30 +110,64 @@ export default function NotesManager({ projects, onJumpToDocument }) {
         }
     }
 
+    const inputStyle = {
+        flex: 1,
+        minWidth: '200px',
+        padding: '10px 14px',
+        fontSize: '13px',
+        border: '1px solid var(--color-border)',
+        outline: 'none',
+        background: 'var(--color-surface)',
+        color: 'var(--color-text)',
+        borderRadius: '10px',
+        fontFamily: 'var(--font-sans)',
+    }
+
+    const selectStyle = {
+        padding: '10px 14px',
+        fontSize: '13px',
+        border: '1px solid var(--color-border)',
+        outline: 'none',
+        background: 'var(--color-surface)',
+        color: 'var(--color-text)',
+        cursor: 'pointer',
+        borderRadius: '10px',
+        fontFamily: 'var(--font-sans)',
+    }
+
+    const actionBtnStyle = {
+        padding: '6px 10px',
+        fontSize: '12px',
+        border: '1px solid var(--color-border)',
+        background: 'var(--color-surface-2)',
+        color: 'var(--color-text-secondary)',
+        cursor: 'pointer',
+        borderRadius: '6px',
+        transition: 'all 0.15s',
+    }
+
     return (
-        <div className="w-full max-w-[900px] mx-auto">
+        <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto' }}>
             {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold tracking-tight" style={{ fontFamily: 'var(--font-sans)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.01em', fontFamily: 'var(--font-sans)', color: 'var(--color-text)', margin: 0 }}>
                     📝 Quản lý ghi chú
                 </h2>
-                <span className="text-xs text-gray-500">{filtered.length} mục</span>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', background: 'var(--color-surface-2)', padding: '4px 10px', borderRadius: '12px' }}>
+                    {filtered.length} mục
+                </span>
             </div>
 
             {/* Filters */}
-            <div className="flex flex-wrap gap-2 mb-4">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
                 <input
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="🔍 Tìm ghi chú..."
-                    className="flex-1 min-w-[200px] px-3 py-2 text-sm border border-gray-300 outline-none focus:border-gray-800"
+                    style={inputStyle}
                 />
-                <select
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value)}
-                    className="px-3 py-2 text-sm border border-gray-300 outline-none focus:border-gray-800 bg-white cursor-pointer"
-                >
+                <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={selectStyle}>
                     <option value="">Tất cả loại</option>
                     <option value="highlight">🖍️ Highlight</option>
                     <option value="drawing">✏️ Vẽ tay</option>
@@ -144,44 +176,63 @@ export default function NotesManager({ projects, onJumpToDocument }) {
                 {filtered.length > 0 && (
                     <button
                         onClick={handleBulkDelete}
-                        className="px-3 py-2 text-sm font-medium border border-red-300 text-red-600 hover:bg-red-600 hover:text-white hover:border-red-600 cursor-pointer transition-colors"
-                    >
-                        🗑 Xóa tất cả
-                    </button>
+                        style={{
+                            padding: '10px 14px',
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            border: '1px solid var(--color-danger)',
+                            color: 'var(--color-danger)',
+                            background: 'transparent',
+                            cursor: 'pointer',
+                            borderRadius: '10px',
+                            transition: 'all 0.15s',
+                        }}
+                    >🗑 Xóa tất cả</button>
                 )}
             </div>
 
             {/* List */}
             {loading ? (
-                <div className="text-center py-16 text-gray-400">
-                    <p className="text-sm">Đang tải ghi chú...</p>
+                <div style={{ textAlign: 'center', padding: '64px 0', color: 'var(--color-text-muted)' }}>
+                    <p style={{ fontSize: '14px' }}>Đang tải ghi chú...</p>
                 </div>
             ) : filtered.length === 0 ? (
-                <div className="text-center py-16 text-gray-400">
-                    <p className="text-4xl mb-3">📭</p>
-                    <p className="text-sm">Chưa có ghi chú nào</p>
-                    <p className="text-xs mt-1 text-gray-300">Mở tài liệu → bật Ghi chú → chọn text để highlight hoặc vẽ tay</p>
+                <div style={{ textAlign: 'center', padding: '64px 0', color: 'var(--color-text-muted)' }}>
+                    <p style={{ fontSize: '48px', marginBottom: '12px' }}>📭</p>
+                    <p style={{ fontSize: '14px' }}>Chưa có ghi chú nào</p>
+                    <p style={{ fontSize: '12px', marginTop: '4px', color: 'var(--color-text-muted)' }}>Mở tài liệu → bật Ghi chú → chọn text để highlight hoặc vẽ tay</p>
                 </div>
             ) : (
-                <div className="space-y-2">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {filtered.map((ann) => (
                         <div
                             key={ann.id}
-                            className="group border border-gray-200 bg-white hover:border-gray-400 transition-colors p-3"
+                            style={{
+                                border: '1px solid var(--color-border)',
+                                background: 'var(--color-surface)',
+                                padding: '12px',
+                                borderRadius: '10px',
+                                transition: 'border-color 0.2s',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-border-light)'}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
                         >
                             {editingId === ann.id ? (
                                 /* Edit mode */
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-semibold text-gray-500">Màu:</span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Màu:</span>
                                         {COLORS.map((c) => (
                                             <button
                                                 key={c.value}
                                                 onClick={() => setEditColor(c.value)}
-                                                className="w-6 h-6 border-2 cursor-pointer"
                                                 style={{
+                                                    width: '24px',
+                                                    height: '24px',
+                                                    border: editColor === c.value ? '2px solid var(--color-text)' : '2px solid transparent',
+                                                    borderRadius: '6px',
                                                     backgroundColor: c.value,
-                                                    borderColor: editColor === c.value ? '#000' : 'transparent',
+                                                    cursor: 'pointer',
                                                 }}
                                             />
                                         ))}
@@ -192,48 +243,67 @@ export default function NotesManager({ projects, onJumpToDocument }) {
                                         onChange={(e) => setEditNote(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                                         placeholder="Nội dung ghi chú..."
-                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 outline-none focus:border-gray-800"
+                                        style={{
+                                            ...inputStyle,
+                                            minWidth: 'auto',
+                                            width: '100%',
+                                        }}
                                         autoFocus
                                     />
-                                    <div className="flex gap-1">
+                                    <div style={{ display: 'flex', gap: '6px' }}>
                                         <button
                                             onClick={handleSaveEdit}
-                                            className="px-3 py-1.5 text-xs bg-gray-800 text-white cursor-pointer"
-                                        >
-                                            ✓ Lưu
-                                        </button>
+                                            style={{
+                                                padding: '7px 14px',
+                                                fontSize: '12px',
+                                                background: 'var(--color-accent)',
+                                                color: 'white',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                borderRadius: '8px',
+                                            }}
+                                        >✓ Lưu</button>
                                         <button
                                             onClick={() => setEditingId(null)}
-                                            className="px-3 py-1.5 text-xs border border-gray-300 cursor-pointer hover:bg-gray-100"
-                                        >
-                                            Hủy
-                                        </button>
+                                            style={{
+                                                padding: '7px 14px',
+                                                fontSize: '12px',
+                                                border: '1px solid var(--color-border)',
+                                                background: 'transparent',
+                                                color: 'var(--color-text-muted)',
+                                                cursor: 'pointer',
+                                                borderRadius: '8px',
+                                            }}
+                                        >Hủy</button>
                                     </div>
                                 </div>
                             ) : (
                                 /* View mode */
-                                <div className="flex items-start gap-3">
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                                     {/* Color indicator */}
-                                    <div
-                                        className="w-1 self-stretch flex-shrink-0 rounded-full"
-                                        style={{ backgroundColor: ann.color || '#fde047' }}
-                                    />
+                                    <div style={{
+                                        width: '3px',
+                                        alignSelf: 'stretch',
+                                        flexShrink: 0,
+                                        borderRadius: '3px',
+                                        backgroundColor: ann.color || '#fde047',
+                                    }} />
 
-                                    <div className="flex-1 min-w-0">
+                                    <div style={{ flex: 1, minWidth: 0 }}>
                                         {/* Header row */}
-                                        <div className="flex items-center gap-2 mb-1">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
                                             <span>{getTypeIcon(ann.type)}</span>
-                                            <span className="text-xs font-semibold text-gray-800">
+                                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text)' }}>
                                                 {getTypeLabel(ann.type)}
                                             </span>
-                                            <span className="text-xs text-gray-400">•</span>
-                                            <span className="text-xs text-gray-500 truncate">
+                                            <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>•</span>
+                                            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {ann.docName || 'Không rõ'}
                                             </span>
                                             {ann.projName && (
                                                 <>
-                                                    <span className="text-xs text-gray-400">•</span>
-                                                    <span className="text-xs text-gray-400 truncate">
+                                                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>•</span>
+                                                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                         📂 {ann.projName}
                                                     </span>
                                                 </>
@@ -242,54 +312,57 @@ export default function NotesManager({ projects, onJumpToDocument }) {
 
                                         {/* Text content */}
                                         {ann.text && (
-                                            <p
-                                                className="text-sm px-2 py-1 mb-1 rounded"
-                                                style={{ backgroundColor: (ann.color || '#fde047') + '40' }}
-                                            >
+                                            <p style={{
+                                                fontSize: '13px',
+                                                padding: '6px 10px',
+                                                marginBottom: '4px',
+                                                borderRadius: '6px',
+                                                backgroundColor: (ann.color || '#fde047') + '25',
+                                                color: 'var(--color-text)',
+                                                margin: '0 0 4px',
+                                            }}>
                                                 "{ann.text}"
                                             </p>
                                         )}
 
                                         {/* Note */}
                                         {ann.note && (
-                                            <p className="text-xs text-gray-600 italic">
+                                            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontStyle: 'italic', margin: '0 0 2px' }}>
                                                 💬 {ann.note}
                                             </p>
                                         )}
 
                                         {/* Date */}
-                                        <p className="text-xs text-gray-400 mt-1">
-                                            {ann.createdAt
-                                                ? new Date(ann.createdAt).toLocaleString('vi-VN')
-                                                : ''}
+                                        <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', margin: '4px 0 0' }}>
+                                            {ann.createdAt ? new Date(ann.createdAt).toLocaleString('vi-VN') : ''}
                                         </p>
                                     </div>
 
                                     {/* Actions */}
-                                    <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
                                         {ann.document_id && (
                                             <button
                                                 onClick={() => onJumpToDocument?.(ann.document_id, ann.project_id, ann.scrollPosition)}
-                                                className="p-1.5 text-xs border border-gray-300 hover:bg-gray-800 hover:text-white hover:border-gray-800 cursor-pointer"
+                                                style={actionBtnStyle}
                                                 title={ann.scrollPosition ? `Mở tài liệu (vị trí ${Math.round(ann.scrollPosition)}px)` : 'Mở tài liệu'}
-                                            >
-                                                📄
-                                            </button>
+                                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.color = 'var(--color-accent-light)' }}
+                                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)' }}
+                                            >📄</button>
                                         )}
                                         <button
                                             onClick={() => handleStartEdit(ann)}
-                                            className="p-1.5 text-xs border border-gray-300 hover:bg-gray-800 hover:text-white hover:border-gray-800 cursor-pointer"
+                                            style={actionBtnStyle}
                                             title="Sửa"
-                                        >
-                                            ✏️
-                                        </button>
+                                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.color = 'var(--color-accent-light)' }}
+                                            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)' }}
+                                        >✏️</button>
                                         <button
                                             onClick={() => handleDelete(ann.id)}
-                                            className="p-1.5 text-xs border border-gray-300 hover:bg-red-600 hover:text-white hover:border-red-600 cursor-pointer"
+                                            style={actionBtnStyle}
                                             title="Xóa"
-                                        >
-                                            🗑
-                                        </button>
+                                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-danger)'; e.currentTarget.style.color = 'var(--color-danger)' }}
+                                            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)' }}
+                                        >🗑</button>
                                     </div>
                                 </div>
                             )}

@@ -1,15 +1,35 @@
 @import "tailwindcss";
 
 /* ============================================================
-   HoSo Reader – E-ink Optimized Design System
-   Zero gradients, zero shadows, minimal animations.
-   Pure high-contrast black & white. Responsive.
+   HoSo Reader – Modern Dark Theme Design System
+   Glassmorphism, gradients, micro-animations.
+   Premium dark UI with high contrast.
    ============================================================ */
 
 @theme {
-  /* — Colors: Pure B&W — */
-  --color-ink: #000000;
+  /* — Colors: Dark premium palette — */
+  --color-ink: #e4e4e7;
   --color-paper: #ffffff;
+  --color-bg: #0c0c10;
+  --color-surface: #16161e;
+  --color-surface-2: #1e1e2a;
+  --color-surface-3: #282836;
+  --color-border: #2e2e3e;
+  --color-border-light: #3a3a4e;
+  --color-accent: #6366f1;
+  --color-accent-light: #818cf8;
+  --color-accent-dim: rgba(99, 102, 241, 0.15);
+  --color-text: #e4e4e7;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+
+  /* Annotation colors */
+  --color-highlight: #fde047;
+
+  /* Gray scale for paper content */
   --color-gray-50: #fafafa;
   --color-gray-100: #f5f5f5;
   --color-gray-200: #e5e5e5;
@@ -18,12 +38,9 @@
   --color-gray-700: #404040;
   --color-gray-900: #171717;
 
-  /* Annotation colors */
-  --color-highlight: #fde047;
-
   /* — Typography — */
   --font-doc: 'Calibri', 'Carlito', 'Arial', 'Helvetica Neue', sans-serif;
-  --font-sans: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Inter', 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
 
   /* — A4 Dimensions — */
   --a4-width: 210mm;
@@ -36,8 +53,8 @@
    ============================================================ */
 html {
   font-family: var(--font-sans);
-  color: var(--color-ink);
-  background-color: var(--color-gray-100);
+  color: var(--color-text);
+  background-color: var(--color-bg);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -49,6 +66,7 @@ body {
   overscroll-behavior: none;
   max-width: 100vw;
   overflow-x: hidden;
+  background: var(--color-bg);
 }
 
 /* ============================================================
@@ -64,9 +82,11 @@ body {
   font-family: var(--font-doc);
   font-size: 12pt;
   line-height: 1.8;
-  color: var(--color-ink);
+  color: #1a1a2e;
   overflow-wrap: break-word;
   position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
 }
 
 /* Tablet: fluid width */
@@ -91,6 +111,8 @@ body {
     box-sizing: border-box;
     overflow-wrap: break-word;
     word-break: break-word;
+    border-radius: 0;
+    box-shadow: none;
   }
 }
 
@@ -101,8 +123,9 @@ body {
   margin: 0 0 16pt 0;
   line-height: 1.2;
   letter-spacing: -0.01em;
-  border-bottom: 2px solid var(--color-ink);
+  border-bottom: 2px solid #1a1a2e;
   padding-bottom: 8pt;
+  color: #1a1a2e;
 }
 
 .paper h2 {
@@ -110,6 +133,7 @@ body {
   font-weight: 600;
   margin: 24pt 0 12pt 0;
   line-height: 1.3;
+  color: #1a1a2e;
 }
 
 .paper h3 {
@@ -117,12 +141,14 @@ body {
   font-weight: 600;
   margin: 20pt 0 8pt 0;
   line-height: 1.4;
+  color: #1a1a2e;
 }
 
 .paper h4 {
   font-size: 13pt;
   font-weight: 600;
   margin: 16pt 0 6pt 0;
+  color: #1a1a2e;
 }
 
 @media (max-width: 640px) {
@@ -163,9 +189,10 @@ body {
 .paper blockquote {
   margin: 12pt 0;
   padding: 8pt 16pt;
-  border-left: 3px solid var(--color-ink);
+  border-left: 3px solid var(--color-accent);
   font-style: italic;
   color: var(--color-gray-700);
+  background: rgba(99, 102, 241, 0.04);
 }
 
 .paper code {
@@ -201,7 +228,7 @@ body {
 
 .paper th,
 .paper td {
-  border: 1px solid var(--color-ink);
+  border: 1px solid #1a1a2e;
   padding: 6pt 10pt;
   text-align: left;
 }
@@ -249,7 +276,7 @@ body {
 }
 
 .paper a {
-  color: var(--color-ink);
+  color: var(--color-accent);
   text-decoration: underline;
 }
 
@@ -259,14 +286,14 @@ body {
 }
 
 /* ============================================================
-   Sidebar – Responsive Drawer
+   Sidebar – Modern Dark Panel
    ============================================================ */
 .sidebar {
-  width: 260px;
+  width: 280px;
   min-height: 100vh;
   min-height: 100dvh;
-  border-right: 1px solid var(--color-gray-300);
-  background: var(--color-paper);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -280,19 +307,32 @@ body {
     bottom: 0;
     z-index: 50;
     transform: translateX(-100%);
-    transition: transform 0.2s ease;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: none;
   }
 
   .sidebar.open {
     transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
   }
 
   .sidebar-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
     z-index: 40;
+    animation: fadeIn 0.2s ease;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
   }
 }
 
@@ -324,9 +364,9 @@ body {
   display: flex;
   gap: 4px;
   align-items: center;
-  padding: 6px 10px;
-  background: var(--color-paper);
-  border: 1px solid var(--color-gray-300);
+  padding: 8px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   font-size: 13px;
   flex-wrap: wrap;
   position: fixed;
@@ -334,71 +374,88 @@ body {
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
 }
 
 .annotation-toolbar button {
-  min-width: 34px;
-  min-height: 34px;
+  min-width: 36px;
+  min-height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--color-gray-300);
-  background: var(--color-paper);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text);
   cursor: pointer;
   font-size: 14px;
   padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .annotation-toolbar button.active {
-  background: var(--color-ink);
-  color: var(--color-paper);
-  border-color: var(--color-ink);
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
 }
 
 .annotation-toolbar button:hover:not(.active) {
-  background: var(--color-gray-100);
+  background: var(--color-surface-3);
+  border-color: var(--color-border-light);
 }
 
-/* Divider between groups */
 .ann-divider {
   width: 1px;
   height: 24px;
-  background: var(--color-gray-300);
+  background: var(--color-border);
   margin: 0 2px;
   flex-shrink: 0;
 }
 
-/* Color picker popup */
 .ann-color-picker {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   z-index: 100;
-  background: var(--color-paper);
-  border: 1px solid var(--color-gray-300);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   padding: 8px;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   width: 192px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 /* ============================================================
-   File Dropper
+   File Dropper – Modern animated zone
    ============================================================ */
 .dropper {
-  border: 2px dashed var(--color-gray-300);
-  padding: 32px;
+  border: 2px dashed var(--color-border-light);
+  padding: 40px;
   text-align: center;
   cursor: pointer;
   font-family: var(--font-sans);
-  color: var(--color-gray-500);
-  transition: border-color 0.15s;
+  color: var(--color-text-muted);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--color-surface);
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.dropper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(129, 140, 248, 0.03));
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 @media (max-width: 640px) {
@@ -409,12 +466,19 @@ body {
 
 .dropper:hover,
 .dropper.active {
-  border-color: var(--color-ink);
-  color: var(--color-ink);
+  border-color: var(--color-accent);
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  box-shadow: 0 0 0 4px var(--color-accent-dim);
+}
+
+.dropper:hover::before,
+.dropper.active::before {
+  opacity: 1;
 }
 
 /* ============================================================
-   Touch-friendly: min tap targets 48px
+   Touch-friendly: min tap targets
    ============================================================ */
 @media (max-width: 768px) {
 
@@ -437,6 +501,7 @@ body {
   html,
   body {
     background: white !important;
+    color: black !important;
   }
 
   .no-print {
@@ -453,6 +518,8 @@ body {
     padding: 0;
     margin: 0;
     page-break-inside: auto;
+    box-shadow: none;
+    color: black;
   }
 
   .paper h1,
@@ -476,18 +543,24 @@ body {
 }
 
 /* ============================================================
-   Scrollbar (minimal for E-ink)
+   Scrollbar (dark themed)
    ============================================================ */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-gray-100);
+  background: var(--color-surface);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-gray-500);
+  background: var(--color-border-light);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
 }
 
 /* ============================================================
@@ -497,8 +570,47 @@ body {
   position: relative;
 }
 
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  padding: 12px 24px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  color: var(--color-text);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  z-index: 9999;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: toastIn 0.3s ease forwards;
+}
+
+.toast.success {
+  border-color: var(--color-success);
+}
+
+.toast.error {
+  border-color: var(--color-danger);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 /* ============================================================
    Focus Reading Mode – Full Screen Reader
+   *** PRESERVED EXACTLY AS-IS — DO NOT MODIFY ***
    ============================================================ */
 
 /* Root overlay */
