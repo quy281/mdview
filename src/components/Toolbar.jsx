@@ -3,7 +3,7 @@
  * Shows breadcrumb (project › file) + action buttons only.
  * View tabs are in Sidebar — not here (to avoid duplication).
  */
-export default function Toolbar({ fileName, projectName, onPrint, onSaveHtml, annotationActive, onAnnotationToggle, currentView, onEnterFocus }) {
+export default function Toolbar({ fileName, projectName, onPrint, onSaveHtml, annotationMode, onSetAnnotationMode, currentView, onEnterFocus }) {
     return (
         <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-300 bg-white no-print gap-2">
             {/* Left: breadcrumb / context label */}
@@ -49,21 +49,40 @@ export default function Toolbar({ fileName, projectName, onPrint, onSaveHtml, an
                         </button>
                     )}
 
+                    {/* Draw Mode */}
                     <button
-                        onClick={onAnnotationToggle}
+                        onClick={() => onSetAnnotationMode(annotationMode === 'draw' ? 'off' : 'draw')}
                         disabled={!fileName}
                         className={`px-3 py-2 text-sm font-medium border cursor-pointer
                          flex items-center gap-1.5
                          disabled:opacity-30 disabled:cursor-not-allowed
-                         ${annotationActive
+                         ${annotationMode === 'draw'
                                 ? 'border-ink bg-ink text-paper'
                                 : 'border-gray-300 hover:border-ink hover:bg-ink hover:text-paper'
                             }`}
                         style={{ transition: 'all 0.15s' }}
-                        title="Ghi chú / Highlight"
+                        title="Ghi chú tay / Vẽ"
                     >
                         <span className="text-base">✏️</span>
-                        <span className="hidden sm:inline">Ghi chú</span>
+                        <span className="hidden sm:inline">Vẽ tay</span>
+                    </button>
+
+                    {/* Highlight Mode */}
+                    <button
+                        onClick={() => onSetAnnotationMode(annotationMode === 'highlight' ? 'off' : 'highlight')}
+                        disabled={!fileName}
+                        className={`px-3 py-2 text-sm font-medium border cursor-pointer
+                         flex items-center gap-1.5
+                         disabled:opacity-30 disabled:cursor-not-allowed
+                         ${annotationMode === 'highlight'
+                                ? 'border-ink bg-ink text-paper'
+                                : 'border-gray-300 hover:border-ink hover:bg-ink hover:text-paper'
+                            }`}
+                        style={{ transition: 'all 0.15s' }}
+                        title="Highlight văn bản"
+                    >
+                        <span className="text-base">🖍️</span>
+                        <span className="hidden sm:inline">Highlight</span>
                     </button>
 
                     <button

@@ -73,6 +73,11 @@ export default function TextHighlighter({ paperId, onHighlight, isActive }) {
 
         const range = selection.getRangeAt(0)
 
+        // Capture scroll position for jump-to-location
+        const paperEl = document.getElementById(paperId)
+        const scrollContainer = paperEl?.closest('.overflow-auto') || paperEl?.closest('.flex-1')
+        const scrollPosition = scrollContainer ? scrollContainer.scrollTop : 0
+
         // Create highlight mark
         const mark = document.createElement('mark')
         mark.style.backgroundColor = color
@@ -96,16 +101,17 @@ export default function TextHighlighter({ paperId, onHighlight, isActive }) {
         setShowNote(false)
         setNoteText('')
 
-        // Notify parent
+        // Notify parent with scroll position
         if (onHighlight) {
             onHighlight({
                 text: selectedText,
                 color,
                 note,
                 highlightId: mark.dataset.highlightId,
+                scrollPosition,
             })
         }
-    }, [selectedText, onHighlight])
+    }, [selectedText, onHighlight, paperId])
 
     if (!toolbar || !isActive) return null
 

@@ -307,6 +307,12 @@ body {
   height: 100%;
   z-index: 10;
   touch-action: none;
+  pointer-events: none;
+  cursor: default;
+}
+
+.annotation-canvas.active {
+  pointer-events: auto;
   cursor: crosshair;
 }
 

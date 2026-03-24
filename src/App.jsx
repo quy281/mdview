@@ -37,7 +37,7 @@ export default function App() {
     const [selectedProject, setSelectedProject] = useState(null)
     const [currentDoc, setCurrentDoc] = useState(null) // FIX #1: renamed from 'document' to avoid shadowing window.document
     const [showDropper, setShowDropper] = useState(true)
-    const [annotationActive, setAnnotationActive] = useState(false)
+    const [annotationMode, setAnnotationMode] = useState('off') // 'off' | 'draw' | 'highlight'
     const [loading, setLoading] = useState(true)
     const [recentDocs, setRecentDocs] = useState(getRecentDocs())
     const [currentView, setCurrentView] = useState(VIEW.READER)
@@ -145,7 +145,7 @@ export default function App() {
         const last = results[results.length - 1]
         setCurrentDoc({ type: last.type, content: last.content, fileName: last.fileName })
         setShowDropper(false)
-        setAnnotationActive(false)
+        setAnnotationMode('off')
         setCurrentView(VIEW.READER)
 
         // FIX #2: await all saves in parallel, no hardcoded timeout
@@ -160,7 +160,7 @@ export default function App() {
     const handleSelectDocument = useCallback((doc, projectId, projectName) => {
         setCurrentDoc({ type: doc.type, content: doc.content, fileName: doc.fileName })
         setShowDropper(false)
-        setAnnotationActive(false)
+        setAnnotationMode('off')
         // Auto-enter focus mode on mobile
         if (window.innerWidth < 768) {
             setCurrentView(VIEW.FOCUS)
@@ -179,7 +179,7 @@ export default function App() {
                 setSelectedProject(proj.id)
                 setCurrentDoc({ type: doc.type, content: doc.content, fileName: doc.fileName })
                 setShowDropper(false)
-                setAnnotationActive(false)
+                setAnnotationMode('off')
                 // Auto-enter focus mode on mobile
                 if (window.innerWidth < 768) {
                     setCurrentView(VIEW.FOCUS)
@@ -233,6 +233,7 @@ export default function App() {
             color: data.color || '#fde047',
             note: data.note || '',
             fileName: data.fileName || currentDoc.fileName,
+            scrollPosition: data.scrollPosition || 0,
         })
     }, [currentDoc, projects, selectedProject])
 
@@ -290,12 +291,19 @@ export default function App() {
     }, [currentDoc])
 
     // — Jump to document from NotesManager —
-    const handleJumpToDocument = useCallback((docId, projectId) => {
+    const handleJumpToDocument = useCallback((docId, projectId, scrollPosition) => {
         for (const proj of projects) {
             const doc = proj.documents.find(d => d.id === docId)
             if (doc) {
                 setSelectedProject(proj.id)
                 handleSelectDocument(doc, proj.id, proj.name)
+                // Scroll to saved position after render
+                if (scrollPosition) {
+                    setTimeout(() => {
+                        const container = window.document.querySelector('.flex-1.overflow-auto')
+                        if (container) container.scrollTop = scrollPosition
+                    }, 300)
+                }
                 return
             }
         }
@@ -350,8 +358,8 @@ export default function App() {
                         projectName={selectedProjectName}
                         onPrint={handlePrint}
                         onSaveHtml={() => handleExportHtml(currentDoc)}
-                        annotationActive={annotationActive}
-                        onAnnotationToggle={() => setAnnotationActive((v) => !v)}
+                        annotationMode={annotationMode}
+                        onSetAnnotationMode={setAnnotationMode}
                         currentView={currentView}
                         onEnterFocus={handleEnterFocus}
                     />
@@ -429,7 +437,7 @@ export default function App() {
 
                             <Paper
                                 document={currentDoc}
-                                annotationActive={annotationActive}
+                                annotationMode={annotationMode}
                                 onHighlight={handleHighlight}
                             />
                         </>
@@ -451,8 +459,8 @@ export default function App() {
                 onDeleteDocument={handleDeleteDocument}
                 onUploadClick={handleUploadClick}
                 currentFile={currentDoc?.fileName}
-                annotationActive={annotationActive}
-                onAnnotationToggle={() => setAnnotationActive((v) => !v)}
+                annotationMode={annotationMode}
+                onSetAnnotationMode={setAnnotationMode}
                 onPrint={handlePrint}
                 onSaveHtml={() => handleExportHtml(currentDoc)}
                 hasDocument={!!currentDoc}

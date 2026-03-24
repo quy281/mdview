@@ -269,9 +269,9 @@ export default function NotesManager({ projects, onJumpToDocument }) {
                                     <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                         {ann.document_id && (
                                             <button
-                                                onClick={() => onJumpToDocument?.(ann.document_id, ann.project_id)}
+                                                onClick={() => onJumpToDocument?.(ann.document_id, ann.project_id, ann.scrollPosition)}
                                                 className="p-1.5 text-xs border border-gray-300 hover:bg-gray-800 hover:text-white hover:border-gray-800 cursor-pointer"
-                                                title="Mở tài liệu"
+                                                title={ann.scrollPosition ? `Mở tài liệu (vị trí ${Math.round(ann.scrollPosition)}px)` : 'Mở tài liệu'}
                                             >
                                                 📄
                                             </button>

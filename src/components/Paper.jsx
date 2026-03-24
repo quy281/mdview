@@ -12,7 +12,7 @@ import TextHighlighter from './TextHighlighter'
  * Renders document content in a print-ready, Calibri-typography container.
  * Supports: md (with Mermaid diagrams, images, GFM), docx, html types.
  */
-export default function Paper({ document, annotationActive, onHighlight }) {
+export default function Paper({ document, annotationMode, onHighlight }) {
     const paperRef = useRef(null)
 
     if (!document) {
@@ -65,7 +65,7 @@ export default function Paper({ document, annotationActive, onHighlight }) {
             {/* Text highlighting toolbar (shows on text selection) */}
             <TextHighlighter
                 paperId="paper-content"
-                isActive={annotationActive}
+                isActive={annotationMode === 'highlight'}
                 onHighlight={onHighlight}
             />
 
@@ -73,7 +73,7 @@ export default function Paper({ document, annotationActive, onHighlight }) {
             <AnnotationCanvas
                 fileName={document.fileName}
                 containerRef={paperRef}
-                isActive={annotationActive}
+                isActive={annotationMode === 'draw'}
             />
         </div>
     )

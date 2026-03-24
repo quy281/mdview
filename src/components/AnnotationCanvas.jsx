@@ -5,8 +5,9 @@ import { useRef, useState, useEffect, useCallback } from 'react'
  * - Pointer capture → no missed strokes even when moving fast
  * - requestAnimationFrame render loop → zero lag
  * - touch-action: pan-y → finger scrolls, pen/mouse draws
- * - Tools: pencil (pressure-sensitive), highlighter, eraser
- * - Color picker for pencil & highlighter
+ * - Tools: pencil (pressure-sensitive), ballpoint, fountain, highlighter, eraser
+ * - Color picker for pencil, ballpoint, fountain & highlighter
+ * - Save as image (PNG export)
  */
 
 const PRESET_COLORS = [
@@ -28,6 +29,25 @@ const TOOLS = {
         opacity: 1,
         composite: 'source-over',
         pressureSensitive: true,
+        lineCap: 'round',
+    },
+    ballpoint: {
+        label: 'Bút bi',
+        icon: '🖊️',
+        baseWidth: 1.5,
+        opacity: 1,
+        composite: 'source-over',
+        pressureSensitive: false,
+        lineCap: 'round',
+    },
+    fountain: {
+        label: 'Bút mực',
+        icon: '🖋️',
+        baseWidth: 2.5,
+        opacity: 0.9,
+        composite: 'source-over',
+        pressureSensitive: true,
+        speedSensitive: true,
         lineCap: 'round',
     },
     highlighter: {
@@ -63,8 +83,9 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
     // Drawing state – all in refs for performance (no re-render during draw)
     const isDrawing = useRef(false)
     const lastPoint = useRef(null)
+    const lastTime = useRef(0)
     const pendingRaf = useRef(null)
-    const pendingSegment = useRef(null) // { prev, point, toolSnap, colorSnap, sizeIdxSnap }
+    const pendingSegment = useRef(null)
 
     const strokesKey = `hoso-annotations-${fileName || 'untitled'}`
 
@@ -181,10 +202,12 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         if (e.pointerType === 'touch') return
 
         e.preventDefault()
+        e.stopPropagation()
         e.currentTarget.setPointerCapture(e.pointerId)
 
         isDrawing.current = true
         lastPoint.current = getPoint(e)
+        lastTime.current = performance.now()
     }, [getPoint])
 
     const draw = useCallback((e) => {
@@ -196,12 +219,28 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         if (!point || !prev) return
 
         const toolConfig = TOOLS[tool]
-        const pressure = toolConfig.pressureSensitive ? point.pressure : 0.5
-        const width = TOOLS[tool].baseWidth * SIZE_MULTIPLIERS[sizeIdx] * (pressure * 1.2 + 0.4)
+        const now = performance.now()
+        const dt = now - (lastTime.current || now)
+
+        let width
+        if (toolConfig.speedSensitive) {
+            // Fountain pen: width varies with speed (slower = thicker)
+            const dx = point.x - prev.x
+            const dy = point.y - prev.y
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            const speed = dt > 0 ? dist / dt : 0
+            const speedFactor = Math.max(0.4, Math.min(1.8, 1.5 - speed * 0.8))
+            const pressure = toolConfig.pressureSensitive ? point.pressure : 0.5
+            width = toolConfig.baseWidth * SIZE_MULTIPLIERS[sizeIdx] * speedFactor * (pressure * 1.2 + 0.4)
+        } else {
+            const pressure = toolConfig.pressureSensitive ? point.pressure : 0.5
+            width = toolConfig.baseWidth * SIZE_MULTIPLIERS[sizeIdx] * (pressure * 1.2 + 0.4)
+        }
 
         // Queue RAF render
         pendingSegment.current = { prev, point, toolConfig, colorVal: color, width }
         lastPoint.current = point
+        lastTime.current = now
 
         if (!pendingRaf.current) {
             pendingRaf.current = requestAnimationFrame(flushSegment)
@@ -233,6 +272,28 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         ctx.clearRect(0, 0, canvas.width, canvas.height)
         localStorage.removeItem(strokesKey)
     }, [strokesKey])
+
+    // ── Save as image ──────────────────────────────────────────────────────
+    const saveAsImage = useCallback(() => {
+        const canvas = canvasRef.current
+        if (!canvas) return
+
+        // Check if canvas has content
+        const ctx = canvas.getContext('2d')
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const hasContent = imageData.data.some((val, idx) => idx % 4 === 3 && val > 0)
+        if (!hasContent) {
+            alert('Chưa có nét vẽ nào để lưu!')
+            return
+        }
+
+        const baseName = (fileName || 'annotation').replace(/\.[^.]+$/, '')
+        const dataUrl = canvas.toDataURL('image/png')
+        const link = window.document.createElement('a')
+        link.href = dataUrl
+        link.download = `${baseName}_annotation_${Date.now()}.png`
+        link.click()
+    }, [fileName])
 
     if (!isActive) return null
 
@@ -344,6 +405,11 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
 
                 <span className="ann-divider" />
 
+                {/* Save as image */}
+                <button onClick={saveAsImage} title="Lưu bản sao ảnh">
+                    💾
+                </button>
+
                 {/* Clear */}
                 <button onClick={clearAll} title="Xóa tất cả">🗑️</button>
             </div>
@@ -351,7 +417,7 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
             {/* Canvas – touch-action pan-y lets finger scroll, pen/mouse draws */}
             <canvas
                 ref={canvasRef}
-                className={`annotation-canvas ${tool === 'eraser' ? 'eraser' : ''}`}
+                className={`annotation-canvas active ${tool === 'eraser' ? 'eraser' : ''}`}
                 style={{ touchAction: 'pan-y' }}
                 onPointerDown={startDraw}
                 onPointerMove={draw}
