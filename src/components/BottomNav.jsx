@@ -187,16 +187,6 @@ export default function BottomNav({
                                 <p className="text-sm font-bold uppercase tracking-wider mb-3">Công cụ</p>
 
                                 <button
-                                    onClick={() => { onSetAnnotationMode(annotationMode === 'draw' ? 'off' : 'draw'); setShowPanel(false); }}
-                                    disabled={!hasDocument}
-                                    className={`w-full py-3 px-4 text-sm font-medium flex items-center gap-3 border cursor-pointer
-                             disabled:opacity-30
-                             ${annotationMode === 'draw' ? 'bg-ink text-paper border-ink' : 'border-gray-300 active:bg-gray-100'}`}
-                                >
-                                    ✏️ {annotationMode === 'draw' ? 'Tắt vẽ tay' : 'Bật vẽ tay'}
-                                </button>
-
-                                <button
                                     onClick={() => { onSetAnnotationMode(annotationMode === 'highlight' ? 'off' : 'highlight'); setShowPanel(false); }}
                                     disabled={!hasDocument}
                                     className={`w-full py-3 px-4 text-sm font-medium flex items-center gap-3 border cursor-pointer

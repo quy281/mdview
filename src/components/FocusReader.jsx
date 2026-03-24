@@ -8,12 +8,13 @@ import AnnotationCanvas from './AnnotationCanvas'
  * FocusReader – Full-screen focused reading mode.
  * Shows only document content + a minimal bottom bar.
  * Bottom bar: ← Back | ✏️ Ghi chú tay | 📝 Quick note
+ * Drawing canvas is positioned over the scrollable content area.
  */
 export default function FocusReader({ document, onExit, onSaveNote }) {
     const [annotationActive, setAnnotationActive] = useState(false)
     const [showNoteInput, setShowNoteInput] = useState(false)
     const [noteText, setNoteText] = useState('')
-    const paperRef = useRef(null)
+    const contentRef = useRef(null)
 
     const handleSaveNote = useCallback(() => {
         if (!noteText.trim()) {
@@ -39,8 +40,13 @@ export default function FocusReader({ document, onExit, onSaveNote }) {
 
     return (
         <div className="focus-mode">
-            {/* Scrollable content area */}
-            <div className="focus-content" ref={paperRef} id="focus-paper-content">
+            {/* Scrollable content area — canvas container */}
+            <div
+                className="focus-content"
+                ref={contentRef}
+                id="focus-paper-content"
+                style={{ position: 'relative' }}
+            >
                 <div className="focus-paper">
                     {document.type === 'md' ? (
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -51,14 +57,13 @@ export default function FocusReader({ document, onExit, onSaveNote }) {
                     )}
                 </div>
 
-                {/* Canvas overlay for handwriting */}
-                {annotationActive && (
-                    <AnnotationCanvas
-                        fileName={document.fileName}
-                        containerRef={paperRef}
-                        isActive={annotationActive}
-                    />
-                )}
+                {/* Canvas overlay for handwriting — always mounted when active,
+                    positioned over the entire scrollable content area */}
+                <AnnotationCanvas
+                    fileName={`focus-${document.fileName}`}
+                    containerRef={contentRef}
+                    isActive={annotationActive}
+                />
             </div>
 
             {/* Quick note input (above bottom bar) */}

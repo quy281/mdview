@@ -49,24 +49,6 @@ export default function Toolbar({ fileName, projectName, onPrint, onSaveHtml, an
                         </button>
                     )}
 
-                    {/* Draw Mode */}
-                    <button
-                        onClick={() => onSetAnnotationMode(annotationMode === 'draw' ? 'off' : 'draw')}
-                        disabled={!fileName}
-                        className={`px-3 py-2 text-sm font-medium border cursor-pointer
-                         flex items-center gap-1.5
-                         disabled:opacity-30 disabled:cursor-not-allowed
-                         ${annotationMode === 'draw'
-                                ? 'border-ink bg-ink text-paper'
-                                : 'border-gray-300 hover:border-ink hover:bg-ink hover:text-paper'
-                            }`}
-                        style={{ transition: 'all 0.15s' }}
-                        title="Ghi chú tay / Vẽ"
-                    >
-                        <span className="text-base">✏️</span>
-                        <span className="hidden sm:inline">Vẽ tay</span>
-                    </button>
-
                     {/* Highlight Mode */}
                     <button
                         onClick={() => onSetAnnotationMode(annotationMode === 'highlight' ? 'off' : 'highlight')}
