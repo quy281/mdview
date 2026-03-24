@@ -98,11 +98,13 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         const rect = container.getBoundingClientRect()
         const dpr = window.devicePixelRatio || 1
 
-        // Save current drawing before resize
-        const imageData = canvas.width > 0 ? canvas.toDataURL() : null
+        // Save current drawing before resize ONLY if user has drawn something
+        // This prevents the massive freeze when loading a new file with a huge canvas
+        const imageData = (canvas.width > 0 && hasUserDrawn.current) ? canvas.toDataURL() : null
 
+        const h = Math.min(rect.height, 16000) // Cap height to prevent browser painting aborts on huge files
         canvas.width = Math.round(rect.width * dpr)
-        canvas.height = Math.round(rect.height * dpr)
+        canvas.height = Math.round(h * dpr)
         canvas.style.width = rect.width + 'px'
         canvas.style.height = rect.height + 'px'
 
@@ -126,6 +128,7 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         if (!isActive || !fileName) return
         const saved = localStorage.getItem(strokesKey)
         if (saved && canvasRef.current) {
+            hasUserDrawn.current = true
             const img = new Image()
             img.onload = () => {
                 const canvas = canvasRef.current
@@ -197,21 +200,23 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
     }, [])
 
     // ── Pointer events ────────────────────────────────────────────────────
-    const startDraw = useCallback((e) => {
-        // Finger touch → let browser scroll
-        if (e.pointerType === 'touch') return
+    const hasUserDrawn = useRef(false)
+    const saveTimeout = useRef(null)
 
+    const startDraw = useCallback((e) => {
+        // Allow both pen and touch to draw when canvas is active
         e.preventDefault()
         e.stopPropagation()
         e.currentTarget.setPointerCapture(e.pointerId)
 
+        hasUserDrawn.current = true
         isDrawing.current = true
         lastPoint.current = getPoint(e)
         lastTime.current = performance.now()
     }, [getPoint])
 
     const draw = useCallback((e) => {
-        if (!isDrawing.current || e.pointerType === 'touch') return
+        if (!isDrawing.current) return
         e.preventDefault()
 
         const point = getPoint(e)
@@ -260,7 +265,9 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         }
         pendingSegment.current = null
 
-        saveAnnotations()
+        // Debounce the save to prevent UI freeze on every stroke for large canvases
+        if (saveTimeout.current) clearTimeout(saveTimeout.current)
+        saveTimeout.current = setTimeout(saveAnnotations, 1000)
     }, [saveAnnotations, flushSegment])
 
     // ── Clear all ──────────────────────────────────────────────────────────
@@ -414,11 +421,11 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
                 <button onClick={clearAll} title="Xóa tất cả">🗑️</button>
             </div>
 
-            {/* Canvas – touch-action pan-y lets finger scroll, pen/mouse draws */}
+            {/* Canvas – touch-action none ensures stylus/finger vertical drawing isn't intercepted as scrolling */}
             <canvas
                 ref={canvasRef}
                 className={`annotation-canvas active ${tool === 'eraser' ? 'eraser' : ''}`}
-                style={{ touchAction: 'pan-y' }}
+                style={{ touchAction: 'none' }}
                 onPointerDown={startDraw}
                 onPointerMove={draw}
                 onPointerUp={endDraw}

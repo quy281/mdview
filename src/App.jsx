@@ -148,10 +148,10 @@ export default function App() {
         setAnnotationMode('off')
         setCurrentView(VIEW.READER)
 
-        // FIX #2: await all saves in parallel, no hardcoded timeout
-        await Promise.all(
-            results.map(r => saveDocument(selectedProject, r.fileName, r.content, r.type))
-        )
+        // FIX #2: save files sequentially to prevent PocketBase SDK auto-canceling parallel requests
+        for (const r of results) {
+            await saveDocument(selectedProject, r.fileName, r.content, r.type)
+        }
         await refreshProjects()
     }, [selectedProject, refreshProjects])
 
