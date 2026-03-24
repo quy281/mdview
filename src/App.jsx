@@ -346,6 +346,7 @@ export default function App() {
                     onOpenRecent={handleOpenRecent}
                     currentView={currentView}
                     onChangeView={setCurrentView}
+                    onSync={refreshProjects}
                 />
             </div>
 
@@ -468,6 +469,7 @@ export default function App() {
                 onOpenRecent={handleOpenRecent}
                 currentView={currentView}
                 onChangeView={setCurrentView}
+                onSync={refreshProjects}
             />
         </div>
     )

@@ -24,6 +24,7 @@ export default function BottomNav({
     onOpenRecent,
     currentView,
     onChangeView,
+    onSync,
 }) {
     const [activeTab, setActiveTab] = useState('doc')
     const [showPanel, setShowPanel] = useState(false)
@@ -88,15 +89,24 @@ export default function BottomNav({
                             <div className="p-4">
                                 <div className="flex items-center justify-between mb-3">
                                     <p className="text-sm font-bold uppercase tracking-wider">Dự án</p>
-                                    <button
-                                        onClick={() => {
-                                            setShowNewProject(true)
-                                            setTimeout(() => inputRef.current?.focus(), 50)
-                                        }}
-                                        className="px-3 py-1.5 text-sm border border-ink bg-ink text-paper cursor-pointer"
-                                    >
-                                        + Thêm
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={onSync}
+                                            className="px-3 py-1.5 text-sm border border-gray-300 bg-white text-ink cursor-pointer"
+                                            title="Đồng bộ dữ liệu"
+                                        >
+                                            🔄 Sync
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowNewProject(true)
+                                                setTimeout(() => inputRef.current?.focus(), 50)
+                                            }}
+                                            className="px-3 py-1.5 text-sm border border-ink bg-ink text-paper cursor-pointer"
+                                        >
+                                            + Thêm
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {showNewProject && (
