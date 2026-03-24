@@ -1,10 +1,11 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
+import { idbGet, idbSet, idbDel } from '../store/idb'
 
 /**
  * AnnotationCanvas – Smooth drawing overlay.
  * - Pointer capture → no missed strokes even when moving fast
- * - requestAnimationFrame render loop → zero lag
- * - touch-action: pan-y → finger scrolls, pen/mouse draws
+ * - Touch ignored for drawing → finger natively scrolls, pen/mouse draws
+ * - requestAnimationFrame render loop removed → zero latency point-to-point drawing
  * - Tools: pencil (pressure-sensitive), ballpoint, fountain, highlighter, eraser
  * - Color picker for pencil, ballpoint, fountain & highlighter
  * - Save as image (PNG export)
@@ -84,8 +85,6 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
     const isDrawing = useRef(false)
     const lastPoint = useRef(null)
     const lastTime = useRef(0)
-    const pendingRaf = useRef(null)
-    const pendingSegment = useRef(null)
 
     const strokesKey = `hoso-annotations-${fileName || 'untitled'}`
 
@@ -123,22 +122,23 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         }
     }, [containerRef])
 
-    // Load saved image
+    // Load saved image from IDB
     useEffect(() => {
         if (!isActive || !fileName) return
-        const saved = localStorage.getItem(strokesKey)
-        if (saved && canvasRef.current) {
-            hasUserDrawn.current = true
-            const img = new Image()
-            img.onload = () => {
-                const canvas = canvasRef.current
-                if (!canvas) return
-                const ctx = canvas.getContext('2d')
-                const dpr = window.devicePixelRatio || 1
-                ctx.drawImage(img, 0, 0, canvas.width / dpr, canvas.height / dpr)
+        idbGet(strokesKey).then(saved => {
+            if (saved && canvasRef.current) {
+                hasUserDrawn.current = true
+                const img = new Image()
+                img.onload = () => {
+                    const canvas = canvasRef.current
+                    if (!canvas) return
+                    const ctx = canvas.getContext('2d')
+                    const dpr = window.devicePixelRatio || 1
+                    ctx.drawImage(img, 0, 0, canvas.width / dpr, canvas.height / dpr)
+                }
+                img.src = saved
             }
-            img.src = saved
-        }
+        })
     }, [isActive, fileName, strokesKey])
 
     // Resize observer
@@ -154,7 +154,7 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
     const saveAnnotations = useCallback(() => {
         const canvas = canvasRef.current
         if (!canvas || !fileName) return
-        try { localStorage.setItem(strokesKey, canvas.toDataURL()) } catch { /* full */ }
+        idbSet(strokesKey, canvas.toDataURL()).catch(() => { })
     }, [fileName, strokesKey])
 
     // ── Point helper ──────────────────────────────────────────────────────
@@ -169,42 +169,16 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         }
     }, [])
 
-    // ── RAF render ────────────────────────────────────────────────────────
-    const flushSegment = useCallback(() => {
-        pendingRaf.current = null
-        const seg = pendingSegment.current
-        if (!seg) return
-        pendingSegment.current = null
-
-        const canvas = canvasRef.current
-        if (!canvas) return
-        const ctx = canvas.getContext('2d')
-        const { prev, point, toolConfig, colorVal, width } = seg
-
-        ctx.save()
-        ctx.globalCompositeOperation = toolConfig.composite
-        ctx.globalAlpha = toolConfig.opacity
-        ctx.strokeStyle = toolConfig.composite === 'destination-out' ? 'rgba(0,0,0,1)' : colorVal
-        ctx.lineWidth = width
-        ctx.lineCap = toolConfig.lineCap
-        ctx.lineJoin = 'round'
-
-        ctx.beginPath()
-        ctx.moveTo(prev.x, prev.y)
-        // Smooth curve through midpoint
-        const mx = (prev.x + point.x) / 2
-        const my = (prev.y + point.y) / 2
-        ctx.quadraticCurveTo(prev.x, prev.y, mx, my)
-        ctx.stroke()
-        ctx.restore()
-    }, [])
-
     // ── Pointer events ────────────────────────────────────────────────────
     const hasUserDrawn = useRef(false)
     const saveTimeout = useRef(null)
 
     const startDraw = useCallback((e) => {
-        // Allow both pen and touch to draw when canvas is active
+        // Feature: only allow pen/mouse to draw. Pass-through touch for scrolling.
+        if (e.pointerType === 'touch') {
+            return
+        }
+
         e.preventDefault()
         e.stopPropagation()
         e.currentTarget.setPointerCapture(e.pointerId)
@@ -242,33 +216,38 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
             width = toolConfig.baseWidth * SIZE_MULTIPLIERS[sizeIdx] * (pressure * 1.2 + 0.4)
         }
 
-        // Queue RAF render
-        pendingSegment.current = { prev, point, toolConfig, colorVal: color, width }
+        // Draw synchronously to avoid dropping events on high-Hz displays
+        const canvas = canvasRef.current
+        if (canvas) {
+            const ctx = canvas.getContext('2d')
+            ctx.save()
+            ctx.globalCompositeOperation = toolConfig.composite
+            ctx.globalAlpha = toolConfig.opacity
+            ctx.strokeStyle = toolConfig.composite === 'destination-out' ? 'rgba(0,0,0,1)' : color
+            ctx.lineWidth = width
+            ctx.lineCap = toolConfig.lineCap
+            ctx.lineJoin = 'round'
+
+            ctx.beginPath()
+            ctx.moveTo(prev.x, prev.y)
+            ctx.lineTo(point.x, point.y)
+            ctx.stroke()
+            ctx.restore()
+        }
+
         lastPoint.current = point
         lastTime.current = now
-
-        if (!pendingRaf.current) {
-            pendingRaf.current = requestAnimationFrame(flushSegment)
-        }
-    }, [tool, sizeIdx, color, getPoint, flushSegment])
+    }, [tool, sizeIdx, color, getPoint])
 
     const endDraw = useCallback((e) => {
         if (!isDrawing.current) return
         isDrawing.current = false
         lastPoint.current = null
 
-        // Flush any pending segment
-        if (pendingRaf.current) {
-            cancelAnimationFrame(pendingRaf.current)
-            pendingRaf.current = null
-            flushSegment()
-        }
-        pendingSegment.current = null
-
         // Debounce the save to prevent UI freeze on every stroke for large canvases
         if (saveTimeout.current) clearTimeout(saveTimeout.current)
         saveTimeout.current = setTimeout(saveAnnotations, 1000)
-    }, [saveAnnotations, flushSegment])
+    }, [saveAnnotations])
 
     // ── Clear all ──────────────────────────────────────────────────────────
     const clearAll = useCallback(() => {
@@ -277,7 +256,7 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
         if (!canvas) return
         const ctx = canvas.getContext('2d')
         ctx.clearRect(0, 0, canvas.width, canvas.height)
-        localStorage.removeItem(strokesKey)
+        idbDel(strokesKey)
     }, [strokesKey])
 
     // ── Save as image ──────────────────────────────────────────────────────
@@ -421,11 +400,11 @@ export default function AnnotationCanvas({ fileName, containerRef, isActive }) {
                 <button onClick={clearAll} title="Xóa tất cả">🗑️</button>
             </div>
 
-            {/* Canvas – touch-action none ensures stylus/finger vertical drawing isn't intercepted as scrolling */}
+            {/* Canvas – allow scrolling by leaving touch-action as auto or missing */}
             <canvas
                 ref={canvasRef}
                 className={`annotation-canvas active ${tool === 'eraser' ? 'eraser' : ''}`}
-                style={{ touchAction: 'none' }}
+                style={{ touchAction: 'auto' }}
                 onPointerDown={startDraw}
                 onPointerMove={draw}
                 onPointerUp={endDraw}
