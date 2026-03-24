@@ -76,12 +76,12 @@ export default function App() {
     // Re-fetch when user returns to the tab (handles cross-device stale data)
     useEffect(() => {
         const onVisible = () => {
-            if (document.visibilityState === 'visible') {
+            if (window.document.visibilityState === 'visible') {
                 refreshProjects(true)
             }
         }
-        document.addEventListener('visibilitychange', onVisible)
-        return () => document.removeEventListener('visibilitychange', onVisible)
+        window.document.addEventListener('visibilitychange', onVisible)
+        return () => window.document.removeEventListener('visibilitychange', onVisible)
     }, [refreshProjects])
 
     // Keyboard shortcut: F = enter focus mode
